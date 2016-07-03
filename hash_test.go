@@ -75,6 +75,17 @@ func testHashMiddle(t *testing.T, s1, s2, s3 string) {
 	}
 }
 
+func Test_hash_distance(t *testing.T) {
+	s1 := "574a7773ca432765f6da014e7a42d1ff1572a458"
+	s2 := "574a7773ca432765f6da014e7a42d1ff1572a451"
+	h1, _ := newHash([]byte(s1))
+	h2, _ := newHash([]byte(s2))
+	d1 := h1.distance(h2)
+	if d1.String() != "0000000000000000000000000000000000000009" {
+		t.Fatal(d1)
+	}
+}
+
 func Benchmark_newHash(b *testing.B) {
 	for i := 0; i < rand.Intn(10000); i++ {
 		newRandomHash()

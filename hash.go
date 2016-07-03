@@ -37,6 +37,14 @@ func (h hash) compare(o hash) int {
 	return bytes.Compare(h, o)
 }
 
+func (h hash) distance(o hash) hash {
+	var m [hashLen]byte
+	for i := 0; i < hashLen; i++ {
+		m[i] = h[i] ^ o[i]
+	}
+	return hash(m[:])
+}
+
 func (h hash) middle(o hash) hash {
 	var rem int
 	var m [hashLen]byte
