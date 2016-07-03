@@ -1,6 +1,9 @@
 package dht
 
-import "testing"
+import (
+	"math/rand"
+	"testing"
+)
 
 func Test_newHash(t *testing.T) {
 	s1 := "574a7773ca432765f6da014e7a42d1ff1572a458"
@@ -69,5 +72,11 @@ func testHashMiddle(t *testing.T, s1, s2, s3 string) {
 	h3 := h1.middle(h2)
 	if h3.String() != s3 {
 		t.Fatalf("%s != %s", h3.String(), s3)
+	}
+}
+
+func Benchmark_newHash(b *testing.B) {
+	for i := 0; i < rand.Intn(10000); i++ {
+		newRandomHash()
 	}
 }

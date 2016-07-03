@@ -1,9 +1,11 @@
 package dht
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/rand"
 )
 
 type hash []byte
@@ -23,21 +25,16 @@ func newHash(b []byte) (hash, error) {
 	return h, nil
 }
 
-func (h hash) String() string {
-	return fmt.Sprintf("%02x", string(h))
+func newRandomHash() (hash, error) {
+	buf := bytes.NewBuffer(nil)
+	for i := 0; i < hashLen; i++ {
+		buf.WriteString(fmt.Sprintf("%02x", rand.Intn(256)))
+	}
+	return newHash(buf.Bytes())
 }
 
 func (h hash) compare(o hash) int {
-	for i := 0; i < hashLen; i++ {
-		if h[i] == o[i] {
-			continue
-		}
-		if h[i] < o[i] {
-			return -1
-		}
-		return 1
-	}
-	return 0
+	return bytes.Compare(h, o)
 }
 
 func (h hash) middle(o hash) hash {
@@ -51,4 +48,12 @@ func (h hash) middle(o hash) hash {
 		m[i] = byte(n / 2)
 	}
 	return hash(m[:])
+}
+
+func (h hash) inRange(min, max hash) bool {
+	return h.compare(min) >= 0 && h.compare(max) < 0
+}
+
+func (h hash) String() string {
+	return fmt.Sprintf("%02x", string(h))
 }
