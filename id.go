@@ -8,10 +8,13 @@ import (
 	"time"
 )
 
-// ID consists of 160 bit
+// ZeroID "0000000000000000000000000000000000000000"
+var ZeroID ID
+
+// ID consists of 160 bits
 type ID [5]uint32
 
-// NewID returns a ID
+// NewID returns a id
 func NewID(hash []byte) (id ID, err error) {
 	h := make([]byte, 20)
 	n, err := hex.Decode(h, hash)
@@ -33,7 +36,7 @@ func NewID(hash []byte) (id ID, err error) {
 	return
 }
 
-// NewRandomID returns a random ID
+// NewRandomID returns a random id
 func NewRandomID() ID {
 	buf := bytes.NewBuffer(nil)
 	for i := 0; i < 20; i++ {
@@ -43,7 +46,7 @@ func NewRandomID() ID {
 	return id
 }
 
-// Compare two ID
+// Compare two id
 func (id ID) Compare(o ID) int {
 	for i := 0; i < 5; i++ {
 		if id[i] > o[i] {
@@ -55,7 +58,6 @@ func (id ID) Compare(o ID) int {
 	return 0
 }
 
-// String returns a hash string
 func (id ID) String() string {
 	return fmt.Sprintf("%08x%08x%08x%08x%08x", id[0], id[1], id[2], id[3], id[4])
 }

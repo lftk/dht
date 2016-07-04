@@ -1,38 +1,40 @@
 package dht
 
 import (
-	"bytes"
 	"container/list"
 	"errors"
 	"fmt"
-	"math/rand"
-	"time"
 )
 
-type table struct {
-	id      hash
+type Table struct {
+	id      ID
 	buckets *list.List
 }
 
-func newTable(id hash) *table {
-	t := &table{
+// NewTable returns a table
+func NewTable(id ID) *Table {
+	t := &Table{
 		id:      id,
 		buckets: list.New(),
 	}
-	min, _ := newHash(bytes.Repeat([]byte("00"), hashLen))
-	max, _ := newHash(bytes.Repeat([]byte("ff"), hashLen))
-	t.buckets.PushBack(newBucket(min, max))
+	// initialize the buckets
+	for i := 0; i < 32; i++ {
+		b := NewBucket(ZeroID, 155)
+		b.first[0] = uint32(i) << (32 - 5)
+		t.buckets.PushBack(b)
+	}
 	return t
 }
 
-func (t *table) append(n *node) error {
-	if n.id.compare(t.id) == 0 {
+// Append a node
+func (t *Table) Append(n *Node) error {
+	if n.id.Compare(t.id) == 0 {
 		return fmt.Errorf("node's id equal to table's id")
 	}
 
 	var ele *list.Element
 	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		if e.Value.(*bucket).contain(n.id) {
+		if e.Value.(*Bucket).Test(n.id) {
 			ele = e
 			break
 		}
@@ -41,22 +43,45 @@ func (t *table) append(n *node) error {
 		return fmt.Errorf("not found bucket - %s", n.id)
 	}
 
-	b := ele.Value.(*bucket)
-	if err := b.append(n); err == nil {
+	b := ele.Value.(*Bucket)
+	if err := b.Append(n); err == nil {
 		return nil
 	}
-	if b.contain(t.id) == false {
-		return errors.New("drop this node")
+	if b.Test(t.id) && t.split(ele) {
+		return t.Append(n)
 	}
-
-	b1, b2 := b.split()
-	b.clone(b1)
-	b.cached = n
-	t.buckets.InsertAfter(b2, ele)
-	return errors.New("cache this node")
+	return errors.New("drop this node")
 }
 
-func (t *table) find(id hash) *bucket {
+func (t *Table) split(e *list.Element) bool {
+	b1 := e.Value.(*Bucket)
+	if b1.span == 0 {
+		return false
+	}
+
+	b1.span--
+	first := b1.first
+	slot := 4 - (b1.span >> 5)
+	mask := uint32(1 << (b1.span & 31))
+	b2 := NewBucket(first, b1.span)
+	b2.first[slot] |= mask
+	t.buckets.InsertAfter(b2, e)
+
+	// switch to new bucket
+	ele := b1.nodes.Front()
+	for ele != nil {
+		next := ele.Next()
+		if n := ele.Value.(*Node); n.id[slot]&mask != 0 {
+			b1.nodes.Remove(ele)
+			b2.nodes.PushBack(n)
+		}
+		ele = next
+	}
+	return true
+}
+
+/*
+func (t *table) Find(id ID) *bucket {
 	for e := t.buckets.Front(); e != nil; e = e.Next() {
 		if e.Value.(*bucket).contain(id) {
 			return e.Value.(*bucket)
@@ -64,15 +89,12 @@ func (t *table) find(id hash) *bucket {
 	}
 	return nil
 }
+*/
 
-func (t *table) String() string {
+func (t *Table) String() string {
 	var s string
 	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		s += fmt.Sprintf("%v\n", e.Value.(*bucket))
+		s += fmt.Sprintf("%v\n", e.Value.(*Bucket))
 	}
 	return s
-}
-
-func init() {
-	rand.Seed(time.Now().Unix())
 }

@@ -10,56 +10,60 @@ import (
 
 const maxNodeCount int = 8
 
-type bucket struct {
-	min    hash
-	max    hash
-	time   int64
-	nodes  *list.List
-	cached *node
+// Bucket type
+type Bucket struct {
+	first ID
+	span  uint
+	time  int64
+	nodes *list.List
 }
 
-func newBucket(min, max hash) *bucket {
-	return &bucket{
-		min:   min,
-		max:   max,
+// NewBucket return a bucket
+func NewBucket(first ID, span uint) *Bucket {
+	return &Bucket{
+		first: first,
+		span:  span,
 		time:  time.Now().Unix(),
 		nodes: list.New(),
 	}
 }
 
-func (b *bucket) count() int {
+// Count returns count of all node
+func (b *Bucket) Count() int {
 	return b.nodes.Len()
 }
 
-func (b *bucket) clone(o *bucket) {
-	if b != o {
-		b.min = o.min
-		b.max = o.max
-		b.time = o.time
-		b.nodes = o.nodes
-		b.cached = o.cached
+// Test returns true if has same prefix
+func (b *Bucket) Test(id ID) bool {
+	for i, span := 0, 160-int(b.span); span > 0; i, span = i+1, span-32 {
+		mask := uint32(0xFFFFFFFF)
+		if 32-span > 0 {
+			mask <<= uint32(32 - span)
+		}
+		if (b.first[i]^id[i])&mask != 0 {
+			return false
+		}
 	}
+	return true
 }
 
-func (b *bucket) contain(id hash) bool {
-	return id.inRange(b.min, b.max)
-}
-
-func (b *bucket) append(n *node) error {
+// Append a node, move to back if exist node
+func (b *Bucket) Append(n *Node) error {
 	for e := b.nodes.Front(); e != nil; e = e.Next() {
-		if e.Value.(*node).id.compare(n.id) == 0 {
+		if e.Value.(*Node).id.Compare(n.id) == 0 {
 			b.nodes.MoveToBack(e)
 			return nil
 		}
 	}
-	if b.count() == maxNodeCount {
+	if b.Count() == maxNodeCount {
 		return errors.New("bucket is full")
 	}
 	b.nodes.PushBack(n)
 	return nil
 }
 
-func (b *bucket) remove(n *node) bool {
+// Remove a node, return true if exist node
+func (b *Bucket) Remove(n *Node) bool {
 	for e := b.nodes.Front(); e != nil; e = e.Next() {
 		if e.Value == n {
 			b.nodes.Remove(e)
@@ -69,10 +73,11 @@ func (b *bucket) remove(n *node) bool {
 	return false
 }
 
-func (b *bucket) find(id hash) *node {
-	var ptr *node
-	b.handle(func(n *node) bool {
-		if n.id.compare(id) == 0 {
+// Find returns node
+func (b *Bucket) Find(id ID) *Node {
+	var ptr *Node
+	b.Map(func(n *Node) bool {
+		if n.id.Compare(id) == 0 {
 			ptr = n
 			return false
 		}
@@ -81,13 +86,14 @@ func (b *bucket) find(id hash) *node {
 	return ptr
 }
 
-func (b *bucket) random() *node {
-	if b.count() == 0 {
+// Random returns a random node
+func (b *Bucket) Random() *Node {
+	if b.Count() == 0 {
 		return nil
 	}
-	var ptr *node
-	i := rand.Intn(b.count())
-	b.handle(func(n *node) bool {
+	var ptr *Node
+	i := rand.Intn(b.Count())
+	b.Map(func(n *Node) bool {
 		if i--; i < 0 {
 			ptr = n
 			return false
@@ -97,39 +103,20 @@ func (b *bucket) random() *node {
 	return ptr
 }
 
-func (b *bucket) split() (b1, b2 *bucket) {
-	if b.cached != nil {
-		b.cached.ping()
-		b.cached = nil
-	}
-
-	mid := b.min.middle(b.max)
-	b1 = newBucket(b.min, mid)
-	b2 = newBucket(mid, b.max)
-	b.handle(func(n *node) bool {
-		if n.id.compare(mid) < 0 {
-			b1.nodes.PushBack(n)
-		} else {
-			b2.nodes.PushBack(n)
-		}
-		return true
-	})
-	return
-}
-
-func (b *bucket) handle(f func(n *node) bool) bool {
+// Map all node
+func (b *Bucket) Map(f func(n *Node) bool) bool {
 	for e := b.nodes.Front(); e != nil; e = e.Next() {
-		if f(e.Value.(*node)) == false {
+		if f(e.Value.(*Node)) == false {
 			return false
 		}
 	}
 	return true
 }
 
-func (b *bucket) String() string {
-	s := fmt.Sprintf("%v-%v %d\n", b.min, b.max, b.count())
+func (b *Bucket) String() string {
+	s := fmt.Sprintf("%v %d %d\n", b.first, b.span, b.Count())
 	for e := b.nodes.Front(); e != nil; e = e.Next() {
-		s += fmt.Sprintf("  %v\n", e.Value.(*node))
+		s += fmt.Sprintf("  %v\n", e.Value.(*Node))
 	}
 	return s
 }

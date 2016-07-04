@@ -5,22 +5,18 @@ import (
 	"testing"
 )
 
-func Benchmark_table_append(b *testing.B) {
+func Benchmark_Table_Append(b *testing.B) {
 	total := rand.Intn(10000)
-	t := newTable(newRandomHashWithoutError())
+	t := NewTable(NewRandomID())
 	for i := 0; i < total; i++ {
-		n := newNode(newRandomHashWithoutError(), "127.0.0.1", 1234)
-		t.append(n)
+		n := NewNode(NewRandomID(), "127.0.0.1", 1234)
+		t.Append(n)
 	}
 	var numsBucket, numsNode int
 	for e := t.buckets.Front(); e != nil; e = e.Next() {
 		numsBucket++
-		numsNode += e.Value.(*bucket).count()
+		numsNode += e.Value.(*Bucket).Count()
 	}
 	b.Logf("total:%d\tbucket:%d\tnode:%d\n", total, numsBucket, numsNode)
-}
-
-func newRandomHashWithoutError() hash {
-	h, _ := newRandomHash()
-	return h
+	//b.Error(t)
 }
