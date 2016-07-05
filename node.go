@@ -1,6 +1,9 @@
 package dht
 
-import "fmt"
+import (
+	"fmt"
+	"net"
+)
 
 // Node represent a dht peer
 type Node struct {
@@ -15,6 +18,14 @@ func NewNode(id ID, ip string, port int) *Node {
 		id:   id,
 		ip:   ip,
 		port: port,
+	}
+}
+
+// Addr returns udb address
+func (n *Node) Addr() *net.UDPAddr {
+	return &net.UDPAddr{
+		IP:   nil,
+		Port: n.port,
 	}
 }
 
