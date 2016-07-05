@@ -26,24 +26,19 @@ func NewID(hash []byte) (id ID, err error) {
 	}
 
 	for i := 0; i < 5; i++ {
-		j := i * 4
-		id[i] |= uint32(h[j+0]) << 24
-		id[i] |= uint32(h[j+1]) << 16
-		id[i] |= uint32(h[j+2]) << 8
-		id[i] |= uint32(h[j+3]) << 0
+		for j, k := i*4, uint32(24); j < (i+1)*4; j, k = j+1, k-8 {
+			id[i] |= uint32(h[j]) << k
+		}
 	}
 	return
 }
 
 // NewRandomID returns a random id
-func NewRandomID() ID {
-	var id ID
-	id[0] = rand.Uint32()
-	id[1] = rand.Uint32()
-	id[2] = rand.Uint32()
-	id[3] = rand.Uint32()
-	id[4] = rand.Uint32()
-	return id
+func NewRandomID() (id ID) {
+	for i := 0; i < 5; i++ {
+		id[i] = rand.Uint32()
+	}
+	return
 }
 
 // Compare two id

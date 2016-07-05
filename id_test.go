@@ -12,7 +12,6 @@ func Test_NewID(t *testing.T) {
 		t.Fatal(err)
 	}
 	if id.String() != h {
-		t.Fatal(id[:])
 		t.Fatal(h, id)
 	}
 }
