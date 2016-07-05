@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
@@ -38,11 +37,12 @@ func NewID(hash []byte) (id ID, err error) {
 
 // NewRandomID returns a random id
 func NewRandomID() ID {
-	buf := bytes.NewBuffer(nil)
-	for i := 0; i < 20; i++ {
-		buf.WriteString(fmt.Sprintf("%02x", rand.Intn(256)))
-	}
-	id, _ := NewID(buf.Bytes())
+	var id ID
+	id[0] = rand.Uint32()
+	id[1] = rand.Uint32()
+	id[2] = rand.Uint32()
+	id[3] = rand.Uint32()
+	id[4] = rand.Uint32()
 	return id
 }
 
@@ -63,5 +63,5 @@ func (id ID) String() string {
 }
 
 func init() {
-	rand.Seed(time.Now().Unix())
+	rand.Seed(time.Now().UnixNano())
 }
