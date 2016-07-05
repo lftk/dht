@@ -9,6 +9,21 @@ type DHT struct {
 	conn *net.UDPConn
 }
 
+// NewDHT returns DHT
+func NewDHT() *DHT {
+	return &DHT{}
+}
+
+// Run dht server
+func (d *DHT) Run() error {
+	return nil
+}
+
+// Exit dht server
+func (d *DHT) Exit() {
+
+}
+
 func (d *DHT) ping() error {
 	return nil
 }
