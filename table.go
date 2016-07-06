@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"sort"
 )
 
 type Table struct {
@@ -90,6 +91,88 @@ func (t *table) Find(id ID) *bucket {
 	return nil
 }
 */
+
+// Lookup returns the K(8) closest good nodes
+func (t *Table) Lookup(id ID) []*Node {
+	var ele *list.Element
+	for e := t.buckets.Front(); e != nil; e = e.Next() {
+		if e.Value.(*Bucket).Test(id) {
+			ele = e
+			break
+		}
+	}
+
+	ln := newLookupNodes(id)
+	if ln.CopyFrom(ele.Value.(*Bucket)); ln.Len() < 8 {
+		prev, next := ele.Prev(), ele.Next()
+		for ln.Len() < 8 && (prev != nil || next != nil) {
+			if prev != nil {
+				ln.CopyFrom(prev.Value.(*Bucket))
+				prev = prev.Prev()
+			}
+			if next != nil {
+				ln.CopyFrom(next.Value.(*Bucket))
+				next = next.Next()
+			}
+		}
+	}
+	sort.Sort(ln)
+
+	if ln.Len() > 8 {
+		return ln.nodes[0:8]
+	}
+	return ln.nodes
+}
+
+type lookupNodes struct {
+	id    ID
+	nodes []*Node
+}
+
+func newLookupNodes(id ID) *lookupNodes {
+	return &lookupNodes{
+		id:    id,
+		nodes: make([]*Node, 0, 8),
+	}
+}
+
+func (ln *lookupNodes) CopyFrom(b *Bucket) {
+	b.Map(func(n *Node) bool {
+		ln.nodes = append(ln.nodes, n)
+		return true
+	})
+}
+
+func (ln *lookupNodes) Len() int {
+	return len(ln.nodes)
+}
+
+func (ln *lookupNodes) Less(i, j int) bool {
+	for k := 0; k < 5; k++ {
+		n1 := ln.nodes[i].id[k] ^ ln.id[k]
+		n2 := ln.nodes[j].id[k] ^ ln.id[k]
+		if n1 < n2 {
+			return true
+		} else if n1 > n2 {
+			return false
+		}
+	}
+	return true
+}
+
+func (ln *lookupNodes) Swap(i, j int) {
+	ln.nodes[i], ln.nodes[j] = ln.nodes[j], ln.nodes[i]
+}
+
+// Map all buckets
+func (t *Table) Map(f func(b *Bucket) bool) bool {
+	for e := t.buckets.Front(); e != nil; e = e.Next() {
+		if !f(e.Value.(*Bucket)) {
+			return false
+		}
+	}
+	return true
+}
 
 func (t *Table) String() string {
 	var s string
