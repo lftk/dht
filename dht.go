@@ -9,16 +9,20 @@ import (
 // DHT server
 type DHT struct {
 	cfg     *Config
+	buf     []byte
 	exit    chan bool
 	conn    *net.UDPConn
+	route   *Table
 	handler Handler
 }
 
 // NewDHT returns DHT
 func NewDHT(cfg *Config) *DHT {
 	return &DHT{
-		cfg:  cfg,
-		exit: make(chan bool),
+		cfg:   cfg,
+		buf:   make([]byte, 4096),
+		exit:  make(chan bool),
+		route: NewTable(NewRandomID()),
 	}
 }
 
@@ -41,7 +45,9 @@ func (d *DHT) Exit() {
 }
 
 func (d *DHT) loop() {
-	fmt.Println(d.conn.LocalAddr())
+	go d.loopPacket()
+
+	d.bootstrap()
 
 	countdown := 10
 	cleanup := time.Tick(30 * time.Second)
@@ -58,6 +64,25 @@ func (d *DHT) loop() {
 	}
 }
 
+func (d *DHT) loopPacket() {
+	for {
+		p, addr, err := d.recvPacket()
+		if err != nil {
+			//
+		}
+		fmt.Println(p, addr, err)
+
+		select {
+		case <-d.exit:
+			return
+		}
+	}
+}
+
+func (d *DHT) bootstrap() {
+	d.FindNode(d.route.id)
+}
+
 // Ping a node
 func (d *DHT) Ping(n *Node) error {
 	return nil
@@ -65,6 +90,7 @@ func (d *DHT) Ping(n *Node) error {
 
 // FindNode method
 func (d *DHT) FindNode(id ID) error {
+
 	return nil
 }
 
@@ -79,31 +105,40 @@ func (d *DHT) AnnouncePeer() error {
 }
 
 func (d *DHT) replyPing(n *Node) (err error) {
-
 	return
 }
 
 func (d *DHT) replyFindNode(n *Node) (err error) {
-	var p packet
+	var p packetData
 	d.sendPacket(n, &p)
 	return
 }
 
 func (d *DHT) replyGetPeers(n *Node) error {
-	var p packet
+	var p packetData
 	d.sendPacket(n, &p)
 	return nil
 }
 
 func (d *DHT) replyAnnouncePeer(n *Node) error {
-	var p packet
+	var p packetData
 	d.sendPacket(n, &p)
 	return nil
 }
 
-func (d *DHT) sendPacket(n *Node, p *packet) (err error) {
+func (d *DHT) sendPacket(n *Node, p *packetData) (err error) {
 	if b, err := p.Marshal(); err == nil {
 		_, err = d.conn.WriteToUDP(b, n.Addr())
 	}
+	return
+}
+
+func (d *DHT) recvPacket() (p *packetData, addr *net.UDPAddr, err error) {
+	_, addr, err = d.conn.ReadFromUDP(d.buf)
+	if err != nil {
+		return
+	}
+	p = new(packetData)
+	err = p.Unmarshal(d.buf)
 	return
 }

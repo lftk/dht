@@ -5,7 +5,7 @@ import (
 )
 
 func Test_packet_Marshal(t *testing.T) {
-	p := packet{
+	p := packetData{
 		T: "aa",
 		Y: "q",
 	}
@@ -31,7 +31,7 @@ func Test_packet_Unmarshal(t *testing.T) {
 }
 
 func testPacketUnmarshal(t *testing.T, b []byte) {
-	var p packet
+	var p packetData
 	err := p.Unmarshal(b)
 	if err != nil {
 		t.Fatal(err)

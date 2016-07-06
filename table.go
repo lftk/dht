@@ -7,6 +7,7 @@ import (
 	"sort"
 )
 
+// Table store all nodes
 type Table struct {
 	id      ID
 	buckets *list.List
@@ -81,16 +82,15 @@ func (t *Table) split(e *list.Element) bool {
 	return true
 }
 
-/*
-func (t *table) Find(id ID) *bucket {
+// Find returns bucket
+func (t *Table) Find(id ID) *Bucket {
 	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		if e.Value.(*bucket).contain(id) {
-			return e.Value.(*bucket)
+		if e.Value.(*Bucket).Test(id) {
+			return e.Value.(*Bucket)
 		}
 	}
 	return nil
 }
-*/
 
 // Lookup returns the K(8) closest good nodes
 func (t *Table) Lookup(id ID) []*Node {
@@ -117,11 +117,7 @@ func (t *Table) Lookup(id ID) []*Node {
 		}
 	}
 	sort.Sort(ln)
-
-	if ln.Len() > 8 {
-		return ln.nodes[0:8]
-	}
-	return ln.nodes
+	return ln.nodes[:8]
 }
 
 type lookupNodes struct {
@@ -167,7 +163,7 @@ func (ln *lookupNodes) Swap(i, j int) {
 // Map all buckets
 func (t *Table) Map(f func(b *Bucket) bool) bool {
 	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		if !f(e.Value.(*Bucket)) {
+		if f(e.Value.(*Bucket)) == false {
 			return false
 		}
 	}

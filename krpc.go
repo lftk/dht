@@ -6,8 +6,24 @@ import (
 	"github.com/zeebo/bencode"
 )
 
-// krpc protocol message packet
 type packet struct {
+	typ  packetType
+	data packetData
+}
+
+// packet type
+type packetType int
+
+// all type
+const (
+	Ping packetType = iota
+	FindNode
+	GetPeers
+	AnnouncePeer
+)
+
+// krpc protocol message packet
+type packetData struct {
 	T string        `bencode:"t"`
 	Y string        `bencode:"y"`
 	Q string        `bencode:"q"`
@@ -31,7 +47,7 @@ type answer struct {
 	InfoHash string `bencode:"info_hash"`
 }
 
-func (p *packet) Error() (n int64, s string) {
+func (p *packetData) Error() (n int64, s string) {
 	if len(p.E) == 2 {
 		n = p.E[0].(int64)
 		s = p.E[1].(string)
@@ -39,11 +55,25 @@ func (p *packet) Error() (n int64, s string) {
 	return
 }
 
-func (p *packet) Marshal() ([]byte, error) {
+func (p *packetData) Type() (typ packetType) {
+	switch p.T {
+	case "pn":
+		typ = Ping
+	case "fn":
+		typ = FindNode
+	case "gp":
+		typ = GetPeers
+	case "ap":
+		typ = AnnouncePeer
+	}
+	return
+}
+
+func (p *packetData) Marshal() ([]byte, error) {
 	return bencode.EncodeBytes(p)
 }
 
-func (p *packet) Unmarshal(b []byte) (err error) {
+func (p *packetData) Unmarshal(b []byte) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
 			err = fmt.Errorf("panic() when bencode.DecodeBytes")

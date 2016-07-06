@@ -10,6 +10,7 @@ type Node struct {
 	id   ID
 	ip   string
 	port int
+	addr *net.UDPAddr
 }
 
 // NewNode returns a node
@@ -23,10 +24,7 @@ func NewNode(id ID, ip string, port int) *Node {
 
 // Addr returns udb address
 func (n *Node) Addr() *net.UDPAddr {
-	return &net.UDPAddr{
-		IP:   nil,
-		Port: n.port,
-	}
+	return n.addr
 }
 
 func (n *Node) String() string {
