@@ -14,22 +14,27 @@ var ZeroID ID
 type ID [5]uint32
 
 // NewID returns a id
-func NewID(hash []byte) (id ID, err error) {
-	h := make([]byte, 20)
-	n, err := hex.Decode(h, hash)
-	if err != nil {
-		return
-	}
-	if n != 20 {
+func NewID(b []byte) (id ID, err error) {
+	if len(b) != 20 {
 		err = fmt.Errorf("invalid hash")
 		return
 	}
-
 	for i := 0; i < 5; i++ {
 		for j, k := i*4, uint32(24); j < (i+1)*4; j, k = j+1, k-8 {
-			id[i] |= uint32(h[j]) << k
+			id[i] |= uint32(b[j]) << k
 		}
 	}
+	return
+}
+
+// ResolveID returns a id
+func ResolveID(s string) (id ID, err error) {
+	b := make([]byte, 20)
+	_, err = hex.Decode(b, []byte(s))
+	if err != nil {
+		return
+	}
+	id, err = NewID(b)
 	return
 }
 
@@ -51,6 +56,13 @@ func (id ID) Compare(o ID) int {
 		}
 	}
 	return 0
+}
+
+// Bytes return 20 bytes
+func (id ID) Bytes() []byte {
+	b := make([]byte, 20)
+	hex.Decode(b, []byte(id.String()))
+	return b
 }
 
 func (id ID) String() string {

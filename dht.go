@@ -9,6 +9,7 @@ import (
 // DHT server
 type DHT struct {
 	cfg     *Config
+	id      ID
 	buf     []byte
 	exit    chan bool
 	conn    *net.UDPConn
@@ -85,17 +86,36 @@ func (d *DHT) bootstrap() {
 
 // Ping a node
 func (d *DHT) Ping(n *Node) error {
-	return nil
+	data := map[string]interface{}{
+		"id": d.id.Bytes(),
+	}
+	msg := newQueryMessage("ping", data)
+	return sendMessage(d.conn, n.addr, msg)
 }
 
 // FindNode method
 func (d *DHT) FindNode(id ID) error {
-
+	data := map[string]interface{}{
+		"id":     d.id.Bytes(),
+		"target": id.Bytes(),
+	}
+	msg := newQueryMessage("find_node", data)
+	for _, n := range d.route.Lookup(id) {
+		sendMessage(d.conn, n.addr, msg)
+	}
 	return nil
 }
 
 // GetPeers method
 func (d *DHT) GetPeers(id ID) error {
+	data := map[string]interface{}{
+		"id":        d.id.Bytes(),
+		"info_hash": id.Bytes(),
+	}
+	msg := newQueryMessage("get_peers", data)
+	for _, n := range d.route.Lookup(id) {
+		sendMessage(d.conn, n.addr, msg)
+	}
 	return nil
 }
 
