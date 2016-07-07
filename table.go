@@ -10,20 +10,14 @@ import (
 // Table store all nodes
 type Table struct {
 	id      ID
-	buckets *list.List
+	buckets *Bucket
 }
 
 // NewTable returns a table
 func NewTable(id ID) *Table {
 	t := &Table{
 		id:      id,
-		buckets: list.New(),
-	}
-	// initialize the buckets
-	for i := 0; i < 32; i++ {
-		b := NewBucket(ZeroID, 155)
-		b.first[0] = uint32(i) << (32 - 5)
-		t.buckets.PushBack(b)
+		buckets: NewBucket(ZeroID),
 	}
 	return t
 }
@@ -55,30 +49,26 @@ func (t *Table) Append(n *Node) error {
 	return errors.New("drop this node")
 }
 
-func (t *Table) split(e *list.Element) bool {
-	b1 := e.Value.(*Bucket)
-	if b1.span == 0 {
+func (t *Table) split(b *Bucket) bool {
+	var bit int
+	if b.next != nil {
+		bit = b.next.first.LowBit()
+	} else {
+		bit = b.first.LowBit()
+	}
+	if bit++; bit >= 160 {
 		return false
 	}
 
-	b1.span--
-	first := b1.first
-	slot := 4 - (b1.span >> 5)
-	mask := uint32(1 << (b1.span & 31))
-	b2 := NewBucket(first, b1.span)
-	b2.first[slot] |= mask
-	t.buckets.InsertAfter(b2, e)
+	first, _ := NewID(b.first.Bytes())
+	first.SetBit(bit, true)
+	b2 := NewBucket(first)
+	b2.next = b.next
+	b.next = b2
 
 	// switch to new bucket
-	ele := b1.nodes.Front()
-	for ele != nil {
-		next := ele.Next()
-		if n := ele.Value.(*Node); n.id[slot]&mask != 0 {
-			b1.nodes.Remove(ele)
-			b2.nodes.PushBack(n)
-		}
-		ele = next
-	}
+	// ...
+
 	return true
 }
 

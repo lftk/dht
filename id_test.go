@@ -14,7 +14,6 @@ func Test_NewID(t *testing.T) {
 	if id.String() != s {
 		t.Fatal(s, id)
 	}
-
 	id2, err := NewID(id.Bytes())
 	if err != nil {
 		t.Fatal(err)

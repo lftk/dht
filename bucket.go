@@ -13,16 +13,15 @@ const maxNodeCount int = 8
 // Bucket type
 type Bucket struct {
 	first ID
-	span  uint
 	time  int64
+	next  *Bucket
 	nodes *list.List
 }
 
 // NewBucket return a bucket
-func NewBucket(first ID, span uint) *Bucket {
+func NewBucket(first ID) *Bucket {
 	return &Bucket{
 		first: first,
-		span:  span,
 		time:  time.Now().Unix(),
 		nodes: list.New(),
 	}
@@ -35,16 +34,8 @@ func (b *Bucket) Count() int {
 
 // Test returns true if has same prefix
 func (b *Bucket) Test(id ID) bool {
-	for i, span := 0, 160-int(b.span); span > 0; i, span = i+1, span-32 {
-		mask := uint32(0xFFFFFFFF)
-		if 32-span > 0 {
-			mask <<= uint32(32 - span)
-		}
-		if (b.first[i]^id[i])&mask != 0 {
-			return false
-		}
-	}
-	return true
+	return id.Compare(b.first) >= 0 &&
+		(b.next == nil || id.Compare(b.next.first) < 0)
 }
 
 // Append a node, move to back if exist node
@@ -114,7 +105,7 @@ func (b *Bucket) Map(f func(n *Node) bool) bool {
 }
 
 func (b *Bucket) String() string {
-	s := fmt.Sprintf("%v %d %d\n", b.first, b.span, b.Count())
+	s := fmt.Sprintf("%v %d\n", b.first, b.Count())
 	for e := b.nodes.Front(); e != nil; e = e.Next() {
 		s += fmt.Sprintf("  %v\n", e.Value.(*Node))
 	}
