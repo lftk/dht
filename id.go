@@ -38,13 +38,10 @@ func ResolveID(s string) (id ID, err error) {
 }
 
 // NewRandomID returns a random id
-func NewRandomID() (id ID, err error) {
+func NewRandomID() (id ID) {
 	n, err := rand.Read(id[:])
-	if err != nil {
-		return
-	}
-	if n != 20 {
-		err = fmt.Errorf("invalid hash")
+	if err != nil || n != 20 {
+		return ZeroID
 	}
 	return
 }

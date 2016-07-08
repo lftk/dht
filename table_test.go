@@ -13,10 +13,11 @@ func Benchmark_Table_Append(b *testing.B) {
 		t.Append(n)
 	}
 	var numsBucket, numsNode int
-	for e := t.buckets.Front(); e != nil; e = e.Next() {
+	t.Map(func(b *Bucket) bool {
 		numsBucket++
-		numsNode += e.Value.(*Bucket).Count()
-	}
+		numsNode += b.Count()
+		return true
+	})
 	b.Logf("total:%d\tbucket:%d\tnode:%d\n", total, numsBucket, numsNode)
 }
 

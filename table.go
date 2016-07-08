@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"container/list"
 	"errors"
 	"fmt"
 	"sort"
@@ -27,23 +26,14 @@ func (t *Table) Append(n *Node) error {
 	if n.id.Compare(t.id) == 0 {
 		return fmt.Errorf("node's id equal to table's id")
 	}
-
-	var ele *list.Element
-	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		if e.Value.(*Bucket).Test(n.id) {
-			ele = e
-			break
-		}
+	b := t.Find(n.id)
+	if b == nil {
+		return fmt.Errorf("not found bucket of %v", n.id)
 	}
-	if ele == nil {
-		return fmt.Errorf("not found bucket - %s", n.id)
-	}
-
-	b := ele.Value.(*Bucket)
 	if err := b.Append(n); err == nil {
 		return nil
 	}
-	if b.Test(t.id) && t.split(ele) {
+	if b.Test(t.id) && t.split(b) {
 		return t.Append(n)
 	}
 	return errors.New("drop this node")
@@ -73,36 +63,35 @@ func (t *Table) split(b *Bucket) bool {
 }
 
 // Find returns bucket
-func (t *Table) Find(id ID) *Bucket {
-	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		if e.Value.(*Bucket).Test(id) {
-			return e.Value.(*Bucket)
+func (t *Table) Find(id ID) (dst *Bucket) {
+	t.Map(func(b *Bucket) bool {
+		if b.Test(id) == true {
+			dst = b
+			return false
 		}
-	}
-	return nil
+		return true
+	})
+	return
 }
 
 // Lookup returns the K(8) closest good nodes
 func (t *Table) Lookup(id ID) []*Node {
-	var ele *list.Element
-	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		if e.Value.(*Bucket).Test(id) {
-			ele = e
-			break
-		}
+	b := t.Find(id)
+	if b == nil {
+		return nil
 	}
 
 	ln := newLookupNodes(id)
-	if ln.CopyFrom(ele.Value.(*Bucket)); ln.Len() < 8 {
-		prev, next := ele.Prev(), ele.Next()
+	if ln.CopyFrom(b); ln.Len() < 8 {
+		prev, next := b.prev, b.next
 		for ln.Len() < 8 && (prev != nil || next != nil) {
 			if prev != nil {
-				ln.CopyFrom(prev.Value.(*Bucket))
-				prev = prev.Prev()
+				ln.CopyFrom(prev)
+				prev = prev.prev
 			}
 			if next != nil {
-				ln.CopyFrom(next.Value.(*Bucket))
-				next = next.Next()
+				ln.CopyFrom(next)
+				next = next.next
 			}
 		}
 	}
@@ -152,8 +141,8 @@ func (ln *lookupNodes) Swap(i, j int) {
 
 // Map all buckets
 func (t *Table) Map(f func(b *Bucket) bool) bool {
-	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		if f(e.Value.(*Bucket)) == false {
+	for b := t.buckets; b != nil; b = b.next {
+		if f(b) == false {
 			return false
 		}
 	}
@@ -162,8 +151,9 @@ func (t *Table) Map(f func(b *Bucket) bool) bool {
 
 func (t *Table) String() string {
 	var s string
-	for e := t.buckets.Front(); e != nil; e = e.Next() {
-		s += fmt.Sprintf("%v\n", e.Value.(*Bucket))
-	}
+	t.Map(func(b *Bucket) bool {
+		s += fmt.Sprintf("%v\n", b)
+		return true
+	})
 	return s
 }

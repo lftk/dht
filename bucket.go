@@ -14,6 +14,7 @@ const maxNodeCount int = 8
 type Bucket struct {
 	first ID
 	time  int64
+	prev  *Bucket
 	next  *Bucket
 	nodes *list.List
 }
@@ -27,7 +28,7 @@ func NewBucket(first ID) *Bucket {
 	}
 }
 
-// Count returns count of all node
+// Count returns count of all nodes
 func (b *Bucket) Count() int {
 	return b.nodes.Len()
 }
@@ -106,8 +107,9 @@ func (b *Bucket) Map(f func(n *Node) bool) bool {
 
 func (b *Bucket) String() string {
 	s := fmt.Sprintf("%v %d\n", b.first, b.Count())
-	for e := b.nodes.Front(); e != nil; e = e.Next() {
-		s += fmt.Sprintf("  %v\n", e.Value.(*Node))
-	}
+	b.Map(func(n *Node) bool {
+		s += fmt.Sprintf("  %v\n", n)
+		return true
+	})
 	return s
 }
