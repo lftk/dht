@@ -57,7 +57,15 @@ func (t *Table) split(b *Bucket) bool {
 	b.next = b2
 
 	// switch to new bucket
-	// ...
+	e := b.nodes.Front()
+	for e != nil {
+		next := e.Next()
+		if b2.Test(e.Value.(*Node).id) {
+			b2.Append(e.Value.(*Node))
+			b.nodes.Remove(e)
+		}
+		e = next
+	}
 
 	return true
 }
