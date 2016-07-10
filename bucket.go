@@ -41,16 +41,19 @@ func (b *Bucket) Test(id ID) bool {
 
 // Append a node, move to back if exist node
 func (b *Bucket) Append(n *Node) error {
-	for e := b.nodes.Front(); e != nil; e = e.Next() {
+	f := b.mapElement(func(e *list.Element) *list.Element {
 		if e.Value.(*Node).id.Compare(n.id) == 0 {
 			b.nodes.MoveToBack(e)
 			return nil
 		}
+		return e
+	})
+	if f == true {
+		if b.Count() == maxNodeCount {
+			return errors.New("bucket is full")
+		}
+		b.nodes.PushBack(n)
 	}
-	if b.Count() == maxNodeCount {
-		return errors.New("bucket is full")
-	}
-	b.nodes.PushBack(n)
 	return nil
 }
 
