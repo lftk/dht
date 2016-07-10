@@ -97,8 +97,17 @@ func (b *Bucket) Random() *Node {
 
 // Map all node
 func (b *Bucket) Map(f func(n *Node) bool) bool {
-	for e := b.nodes.Front(); e != nil; e = e.Next() {
+	return b.mapElement(func(e *list.Element) *list.Element {
 		if f(e.Value.(*Node)) == false {
+			return nil
+		}
+		return e
+	})
+}
+
+func (b *Bucket) mapElement(f func(e *list.Element) *list.Element) bool {
+	for e := b.nodes.Front(); e != nil; e = e.Next() {
+		if e = f(e); e != nil {
 			return false
 		}
 	}
