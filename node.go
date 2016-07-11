@@ -7,14 +7,14 @@ import (
 
 // Node represent a dht peer
 type Node struct {
-	id   ID
+	id   *ID
 	ip   string
 	port int
 	addr *net.UDPAddr
 }
 
 // NewNode returns a node
-func NewNode(id ID, ip string, port int) *Node {
+func NewNode(id *ID, ip string, port int) *Node {
 	return &Node{
 		id:   id,
 		ip:   ip,

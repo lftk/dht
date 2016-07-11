@@ -94,7 +94,7 @@ func (d *DHT) Ping(n *Node) error {
 }
 
 // FindNode method
-func (d *DHT) FindNode(id ID) error {
+func (d *DHT) FindNode(id *ID) error {
 	data := map[string]interface{}{
 		"id":     d.id.Bytes(),
 		"target": id.Bytes(),
@@ -107,7 +107,7 @@ func (d *DHT) FindNode(id ID) error {
 }
 
 // GetPeers method
-func (d *DHT) GetPeers(id ID) error {
+func (d *DHT) GetPeers(id *ID) error {
 	data := map[string]interface{}{
 		"id":        d.id.Bytes(),
 		"info_hash": id.Bytes(),

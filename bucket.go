@@ -12,15 +12,13 @@ const maxNodeCount int = 8
 
 // Bucket type
 type Bucket struct {
-	first ID
+	first *ID
 	time  int64
-	prev  *Bucket
-	next  *Bucket
 	nodes *list.List
 }
 
 // NewBucket return a bucket
-func NewBucket(first ID) *Bucket {
+func NewBucket(first *ID) *Bucket {
 	return &Bucket{
 		first: first,
 		time:  time.Now().Unix(),
@@ -33,22 +31,26 @@ func (b *Bucket) Count() int {
 	return b.nodes.Len()
 }
 
+/*
 // Test returns true if has same prefix
 func (b *Bucket) Test(id ID) bool {
 	return id.Compare(b.first) >= 0 &&
 		(b.next == nil || id.Compare(b.next.first) < 0)
 }
+*/
 
 // Append a node, move to back if exist node
 func (b *Bucket) Append(n *Node) error {
-	f := b.mapElement(func(e *list.Element) *list.Element {
+	var updated bool
+	b.mapElement(func(e *list.Element) bool {
 		if e.Value.(*Node).id.Compare(n.id) == 0 {
+			updated = true
 			b.nodes.MoveToBack(e)
-			return nil
+			return false
 		}
-		return e
+		return true
 	})
-	if f == true {
+	if updated == false {
 		if b.Count() == maxNodeCount {
 			return errors.New("bucket is full")
 		}
@@ -69,7 +71,7 @@ func (b *Bucket) Remove(n *Node) bool {
 }
 
 // Find returns node
-func (b *Bucket) Find(id ID) *Node {
+func (b *Bucket) Find(id *ID) *Node {
 	var ptr *Node
 	b.Map(func(n *Node) bool {
 		if n.id.Compare(id) == 0 {
@@ -99,22 +101,18 @@ func (b *Bucket) Random() *Node {
 }
 
 // Map all node
-func (b *Bucket) Map(f func(n *Node) bool) bool {
-	return b.mapElement(func(e *list.Element) *list.Element {
-		if f(e.Value.(*Node)) == false {
-			return nil
-		}
-		return e
+func (b *Bucket) Map(f func(n *Node) bool) {
+	b.mapElement(func(e *list.Element) bool {
+		return f(e.Value.(*Node))
 	})
 }
 
-func (b *Bucket) mapElement(f func(e *list.Element) *list.Element) bool {
+func (b *Bucket) mapElement(f func(e *list.Element) bool) {
 	for e := b.nodes.Front(); e != nil; e = e.Next() {
-		if e = f(e); e != nil {
-			return false
+		if f(e) == false {
+			return
 		}
 	}
-	return true
 }
 
 func (b *Bucket) String() string {
