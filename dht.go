@@ -66,12 +66,13 @@ func (d *DHT) loop() {
 }
 
 func (d *DHT) loopPacket() {
+	buf := make([]byte, 4096)
 	for {
-		p, addr, err := d.recvPacket()
+		n, addr, err := d.conn.ReadFromUDP(buf)
 		if err != nil {
-			//
+			continue
 		}
-		fmt.Println(p, addr, err)
+		fmt.Println(addr, string(buf[:n]))
 
 		select {
 		case <-d.exit:
@@ -81,84 +82,54 @@ func (d *DHT) loopPacket() {
 }
 
 func (d *DHT) bootstrap() {
-	d.FindNode(d.route.id)
+	d.findNode(d.route.id)
 }
 
-// Ping a node
-func (d *DHT) Ping(n *Node) error {
+func (d *DHT) ping(n *Node) {
 	data := map[string]interface{}{
 		"id": d.id.Bytes(),
 	}
-	msg := newQueryMessage("ping", data)
-	return sendMessage(d.conn, n.addr, msg)
+	msg := newQueryMessage("pn", "ping", data)
+	d.sendMessage([]*Node{n}, msg)
 }
 
-// FindNode method
-func (d *DHT) FindNode(id *ID) error {
+func (d *DHT) findNode(id *ID) {
 	data := map[string]interface{}{
 		"id":     d.id.Bytes(),
 		"target": id.Bytes(),
 	}
-	msg := newQueryMessage("find_node", data)
-	for _, n := range d.route.Lookup(id) {
-		sendMessage(d.conn, n.addr, msg)
-	}
-	return nil
+	msg := newQueryMessage("fn", "find_node", data)
+	d.sendMessage(d.route.Lookup(id), msg)
 }
 
-// GetPeers method
-func (d *DHT) GetPeers(id *ID) error {
+func (d *DHT) getPeers(id *ID) {
 	data := map[string]interface{}{
 		"id":        d.id.Bytes(),
 		"info_hash": id.Bytes(),
 	}
-	msg := newQueryMessage("get_peers", data)
-	for _, n := range d.route.Lookup(id) {
-		sendMessage(d.conn, n.addr, msg)
+	msg := newQueryMessage("gp", "get_peers", data)
+	d.sendMessage(d.route.Lookup(id), msg)
+}
+
+func (d *DHT) sendMessage(nodes []*Node, data interface{}) {
+	addrs := make([]*net.UDPAddr, 0, len(nodes))
+	for i, node := range nodes {
+		addrs[i] = node.Addr()
 	}
-	return nil
+	sendUDPMessage(d.conn, addrs, data)
 }
 
-// AnnouncePeer method
-func (d *DHT) AnnouncePeer() error {
-	return nil
+func (d *DHT) announcePeer() {
 }
 
-func (d *DHT) replyPing(n *Node) (err error) {
-	return
+func (d *DHT) replyPing(n *Node) {
 }
 
-func (d *DHT) replyFindNode(n *Node) (err error) {
-	var p packetData
-	d.sendPacket(n, &p)
-	return
+func (d *DHT) replyFindNode(n *Node) {
 }
 
-func (d *DHT) replyGetPeers(n *Node) error {
-	var p packetData
-	d.sendPacket(n, &p)
-	return nil
+func (d *DHT) replyGetPeers(n *Node) {
 }
 
-func (d *DHT) replyAnnouncePeer(n *Node) error {
-	var p packetData
-	d.sendPacket(n, &p)
-	return nil
-}
-
-func (d *DHT) sendPacket(n *Node, p *packetData) (err error) {
-	if b, err := p.Marshal(); err == nil {
-		_, err = d.conn.WriteToUDP(b, n.Addr())
-	}
-	return
-}
-
-func (d *DHT) recvPacket() (p *packetData, addr *net.UDPAddr, err error) {
-	_, addr, err = d.conn.ReadFromUDP(d.buf)
-	if err != nil {
-		return
-	}
-	p = new(packetData)
-	err = p.Unmarshal(d.buf)
-	return
+func (d *DHT) replyAnnouncePeer(n *Node) {
 }

@@ -91,34 +91,14 @@ type queryMessage struct {
 	A map[string]interface{} `bencode:"a"`
 }
 
-func newPingQueryMessage(id string) *queryMessage {
-	data := map[string]interface{}{"id": id}
-	return newQueryMessage("ping", data)
+func newQueryMessage(id, q string, data map[string]interface{}) *queryMessage {
+	return &queryMessage{T: id, Y: "q", Q: q, A: data}
 }
 
-func newFindNodeQueryMessage(id, target string) *queryMessage {
-	data := map[string]interface{}{"id": id, "target": target}
-	return newQueryMessage("find_node", data)
-}
-
-func newQueryMessage(q string, data map[string]interface{}) *queryMessage {
-	return &queryMessage{
-		T: "aa",
-		Y: "q",
-		Q: q,
-		A: data,
+func sendUDPMessage(conn *net.UDPConn, addrs []*net.UDPAddr, data interface{}) {
+	if b, err := bencode.EncodeBytes(data); err == nil {
+		for _, addr := range addrs {
+			conn.WriteToUDP(b, addr)
+		}
 	}
-}
-
-func sendMessage(conn *net.UDPConn, addr *net.UDPAddr, data interface{}) error {
-	b, err := bencode.EncodeBytes(data)
-	if err != nil {
-		return err
-	}
-	n, err := conn.WriteToUDP(b, addr)
-	if err != nil {
-		return err
-	}
-	fmt.Sprintln(n, string(b))
-	return nil
 }
