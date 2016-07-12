@@ -81,10 +81,9 @@ func (d *DHT) loop() {
 		case <-d.exit:
 			goto EXIT
 		case <-cleanup:
-			//fmt.Println("cleanup...")
 			d.cleanup()
 		case m := <-msg:
-			fmt.Println(string(m))
+			d.handleMessage(m)
 		}
 	}
 
@@ -126,6 +125,15 @@ func (d *DHT) cleanup() {
 	})
 }
 
+func (d *DHT) handleMessage(b []byte) {
+	p := decodeMessage(b)
+	fmt.Printf("%#v\n", *p)
+
+	switch p.T {
+	case "fn":
+	}
+}
+
 func (d *DHT) ping(n *Node) {
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
@@ -141,18 +149,6 @@ func (d *DHT) findNode(id *ID) {
 	}
 	msg := newQueryMessage("fn", "find_node", data)
 	d.sendMessage(d.route.Lookup(id), msg)
-	/*
-		if nodes := d.route.Lookup(id); len(nodes) > 0 {
-			d.sendMessage(nodes, msg)
-		} else {
-			for _, route := range d.cfg.Routes {
-				addr, err := net.ResolveUDPAddr("udp", route)
-				if err == nil {
-					d.conn.WriteToUDP(msg, addr)
-				}
-			}
-		}
-	*/
 }
 
 func (d *DHT) getPeers(id *ID) {
@@ -181,8 +177,6 @@ func (d *DHT) recvMessage(msg chan []byte) {
 		_ = addr
 
 		msg <- buf
-
-		fmt.Println(n, addr /*, string(buf)*/)
 
 		select {
 		case <-d.exit:

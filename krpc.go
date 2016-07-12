@@ -83,6 +83,19 @@ func (p *packetData) Unmarshal(b []byte) (err error) {
 	return
 }
 
+func decodeMessage(b []byte) (p *packetData) {
+	defer func() {
+		if x := recover(); x != nil {
+			p = nil
+		}
+	}()
+	p = new(packetData)
+	if err := bencode.DecodeBytes(b, p); err != nil {
+		p = nil
+	}
+	return
+}
+
 type queryMessage struct {
 	T string                 `bencode:"t"`
 	Y string                 `bencode:"y"`
