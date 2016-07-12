@@ -28,7 +28,7 @@ func (t *Table) Append(n *Node) error {
 	if n.id.Compare(t.id) == 0 {
 		return fmt.Errorf("node's id equal to table's id")
 	}
-	e := t.findElement(n.id)
+	e := t.find(n.id)
 	if e == nil {
 		return fmt.Errorf("not found bucket of %v", n.id)
 	}
@@ -65,7 +65,7 @@ func (t *Table) splitBucket(e *list.Element) bool {
 	t.buckets.InsertAfter(b2, e)
 
 	var eles []*list.Element
-	b.mapElement(func(be *list.Element) bool {
+	b.handle(func(be *list.Element) bool {
 		if inBucket(be.Value.(*Node).id, e) == false {
 			eles = append(eles, be)
 		}
@@ -80,14 +80,14 @@ func (t *Table) splitBucket(e *list.Element) bool {
 
 // Find returns bucket
 func (t *Table) Find(id *ID) *Bucket {
-	if e := t.findElement(id); e != nil {
+	if e := t.find(id); e != nil {
 		return e.Value.(*Bucket)
 	}
 	return nil
 }
 
-func (t *Table) findElement(id *ID) (ele *list.Element) {
-	t.mapElement(func(e *list.Element) bool {
+func (t *Table) find(id *ID) (ele *list.Element) {
+	t.handle(func(e *list.Element) bool {
 		if inBucket(id, e) {
 			ele = e
 			return false
@@ -99,7 +99,7 @@ func (t *Table) findElement(id *ID) (ele *list.Element) {
 
 // Lookup returns the K(8) closest good nodes
 func (t *Table) Lookup(id *ID) []*Node {
-	e := t.findElement(id)
+	e := t.find(id)
 	if e == nil {
 		return nil
 	}
@@ -180,12 +180,12 @@ func (ln *lookupNodes) Swap(i, j int) {
 
 // Map all buckets
 func (t *Table) Map(f func(b *Bucket) bool) {
-	t.mapElement(func(e *list.Element) bool {
+	t.handle(func(e *list.Element) bool {
 		return f(e.Value.(*Bucket))
 	})
 }
 
-func (t *Table) mapElement(f func(e *list.Element) bool) {
+func (t *Table) handle(f func(e *list.Element) bool) {
 	for e := t.buckets.Front(); e != nil; e = e.Next() {
 		if f(e) == false {
 			return

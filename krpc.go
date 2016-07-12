@@ -2,7 +2,6 @@ package dht
 
 import (
 	"fmt"
-	"net"
 
 	"github.com/zeebo/bencode"
 )
@@ -91,14 +90,11 @@ type queryMessage struct {
 	A map[string]interface{} `bencode:"a"`
 }
 
-func newQueryMessage(id, q string, data map[string]interface{}) *queryMessage {
-	return &queryMessage{T: id, Y: "q", Q: q, A: data}
-}
-
-func sendUDPMessage(conn *net.UDPConn, addrs []*net.UDPAddr, data interface{}) {
-	if b, err := bencode.EncodeBytes(data); err == nil {
-		for _, addr := range addrs {
-			conn.WriteToUDP(b, addr)
-		}
+func newQueryMessage(id, q string, data map[string]interface{}) []byte {
+	msg := &queryMessage{id, "q", q, data}
+	b, err := bencode.EncodeBytes(msg)
+	if err != nil {
+		return nil
 	}
+	return b
 }
