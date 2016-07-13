@@ -40,5 +40,5 @@ func (n *Node) IsGood() bool {
 }
 
 func (n *Node) String() string {
-	return fmt.Sprintf("%v %s %d", n.id, n.ip, n.port)
+	return fmt.Sprintf("%v %v", n.id, n.addr)
 }

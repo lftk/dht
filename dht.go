@@ -116,6 +116,8 @@ func (d *DHT) unInitialize() {
 }
 
 func (d *DHT) cleanup() {
+	return
+	fmt.Println("--------------------------------------")
 	d.route.Map(func(b *Bucket) bool {
 		b.Map(func(n *Node) bool {
 			fmt.Println(n)
@@ -125,35 +127,70 @@ func (d *DHT) cleanup() {
 	})
 }
 
-func (d *DHT) handleMessage(b []byte) {
+func (d *DHT) handleMessage(b []byte) error {
 	var h KadMsgHeader
-	if err := decodeMessage(b, &h); err != nil {
-		// ...
-		return
+	if err := DecodeMessage(b, &h); err != nil {
+		return err
 	}
+
+	fmt.Printf("%#v\n", h)
 
 	switch h.Type() {
 	case MsgTypeQuery:
+		var q KadQueryMessage
+		if err := DecodeMessage(b, &q); err != nil {
+			return err
+		}
+		d.handleQueryMessage(&q)
 	case MsgTypeReply:
-		var resp KadResponse
-		decodeMessage(b, &resp)
+		var res KadResponse
+		if err := DecodeMessage(b, &res); err != nil {
+			return err
+		}
 
-		id, _ := NewID(resp.Data.ID)
-		fmt.Println(id)
+		//id, _ := NewID(resp.Data.ID)
+		//fmt.Println(id)
 
-		for k, v := range resp.Nodes() {
+		for k, v := range res.Nodes() {
 			id, _ := NewID([]byte(k))
 			addr, _ := net.ResolveUDPAddr("udp", v)
 
-			fmt.Println(id, addr)
+			//fmt.Println(id, addr)
 
 			n := NewNode2(id, addr)
 			d.route.Append(n)
 
-			d.findNode(d.ID())
+			d.ping(n)
 		}
+		d.findNode(d.ID())
 	case MsgTypeError:
+		var e KadErrorMessage
+		if err := DecodeMessage(b, &e); err != nil {
+			return err
+		}
+		d.handleErrorMessage(&e)
 	}
+	return nil
+}
+
+func (d *DHT) handleQueryMessage(q *KadQueryMessage) {
+	switch q.Q {
+	case "ping":
+		d.replyPing(nil)
+	case "find_node":
+		d.replyFindNode(nil)
+	case "get_peers":
+		d.replyGetPeers(nil)
+	case "announce_peer":
+		d.replyAnnouncePeer(nil)
+	}
+}
+
+func (d *DHT) handleReplyMessage(r *KadReplyMessage) {
+
+}
+
+func (d *DHT) handleErrorMessage(e *KadErrorMessage) {
 }
 
 func (d *DHT) ping(n *Node) {
@@ -189,16 +226,15 @@ func (d *DHT) sendMessage(nodes []*Node, msg []byte) {
 }
 
 func (d *DHT) recvMessage(msg chan []byte) {
-	buf := make([]byte, d.cfg.PacketSize)
 	for {
+		buf := make([]byte, d.cfg.PacketSize)
 		n, addr, err := d.conn.ReadFromUDP(buf)
 		if err != nil {
+			fmt.Println(err)
 			continue
 		}
-		_ = n
 		_ = addr
-
-		msg <- buf
+		msg <- buf[:n]
 
 		select {
 		case <-d.exit:

@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"runtime"
+	"sync"
 
 	"github.com/4396/dht"
 )
@@ -32,23 +34,32 @@ func (l *DHTHandler) UnInitialize() {
 	})
 }
 
-func main() {
+func (l *DHTHandler) HandleError(e *dht.KadError) {
+	fmt.Println("err:", e.Value(), e.String())
+}
+
+func dhtServer() {
 	cfg := dht.NewConfig()
-	cfg.Address = ":6881"
-	cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
+	//cfg.Address = ":6881"
+	//cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
 
 	d := dht.NewDHT(cfg)
 	err := d.Run(NewDHTHandler(d))
 	if err != nil {
 		fmt.Println(err)
 	}
+}
 
-	/*
-		done := make(chan struct{})
+func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	var w sync.WaitGroup
+	w.Add(1)
+	for i := 0; i < 1; i++ {
 		go func() {
-			d.Run(":0", l)
-			close(done)
+			defer w.Done()
+			dhtServer()
 		}()
-		<-done
-	*/
+	}
+	w.Wait()
 }
