@@ -96,7 +96,7 @@ func (d *DHT) initialize() {
 		"id":     d.ID().Bytes(),
 		"target": d.ID().Bytes(),
 	}
-	msg := newQueryMessage("fn", "find_node", data)
+	msg := NewQueryMessage("fn", "find_node", data)
 	for _, route := range d.cfg.Routes {
 		addr, err := net.ResolveUDPAddr("udp", route)
 		if err == nil {
@@ -126,11 +126,33 @@ func (d *DHT) cleanup() {
 }
 
 func (d *DHT) handleMessage(b []byte) {
-	p := decodeMessage(b)
-	fmt.Printf("%#v\n", *p)
+	var h KadMsgHeader
+	if err := decodeMessage(b, &h); err != nil {
+		// ...
+		return
+	}
 
-	switch p.T {
-	case "fn":
+	switch h.Type() {
+	case MsgTypeQuery:
+	case MsgTypeReply:
+		var resp KadResponse
+		decodeMessage(b, &resp)
+
+		id, _ := NewID(resp.Data.ID)
+		fmt.Println(id)
+
+		for k, v := range resp.Nodes() {
+			id, _ := NewID([]byte(k))
+			addr, _ := net.ResolveUDPAddr("udp", v)
+
+			fmt.Println(id, addr)
+
+			n := NewNode2(id, addr)
+			d.route.Append(n)
+
+			d.findNode(d.ID())
+		}
+	case MsgTypeError:
 	}
 }
 
@@ -138,7 +160,7 @@ func (d *DHT) ping(n *Node) {
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
 	}
-	msg := newQueryMessage("pn", "ping", data)
+	msg := NewQueryMessage("pn", "ping", data)
 	d.sendMessage([]*Node{n}, msg)
 }
 
@@ -147,7 +169,7 @@ func (d *DHT) findNode(id *ID) {
 		"id":     d.ID().Bytes(),
 		"target": id.Bytes(),
 	}
-	msg := newQueryMessage("fn", "find_node", data)
+	msg := NewQueryMessage("fn", "find_node", data)
 	d.sendMessage(d.route.Lookup(id), msg)
 }
 
@@ -156,7 +178,7 @@ func (d *DHT) getPeers(id *ID) {
 		"id":        d.ID().Bytes(),
 		"info_hash": id.Bytes(),
 	}
-	msg := newQueryMessage("gp", "get_peers", data)
+	msg := NewQueryMessage("gp", "get_peers", data)
 	d.sendMessage(d.route.Lookup(id), msg)
 }
 

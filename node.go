@@ -22,6 +22,13 @@ func NewNode(id *ID, ip string, port int) *Node {
 	}
 }
 
+func NewNode2(id *ID, addr *net.UDPAddr) *Node {
+	return &Node{
+		id:   id,
+		addr: addr,
+	}
+}
+
 // Addr returns udb address
 func (n *Node) Addr() *net.UDPAddr {
 	return n.addr

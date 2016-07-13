@@ -34,11 +34,14 @@ func (l *DHTHandler) UnInitialize() {
 
 func main() {
 	cfg := dht.NewConfig()
-	cfg.Address = ":1234"
+	cfg.Address = ":6881"
 	cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
 
 	d := dht.NewDHT(cfg)
-	d.Run(NewDHTHandler(d))
+	err := d.Run(NewDHTHandler(d))
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	/*
 		done := make(chan struct{})
