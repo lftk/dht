@@ -143,26 +143,28 @@ func (d *DHT) handleMessage(b []byte) error {
 		}
 		d.handleQueryMessage(&q)
 	case MsgTypeReply:
-		var res KadResponse
-		if err := DecodeMessage(b, &res); err != nil {
-			return err
+		switch h.TID() {
+		case "pn", "fn", "gp":
+			var res KadResponse
+			if err := DecodeMessage(b, &res); err != nil {
+				return err
+			}
+			for k, v := range res.Nodes() {
+				id, _ := NewID([]byte(k))
+				addr, _ := net.ResolveUDPAddr("udp", v)
+
+				n := NewNode2(id, addr)
+				d.route.Append(n)
+
+				d.ping(n)
+			}
+			d.findNode(d.ID())
+		case "ap":
+			var ans KadAnswer
+			if err := DecodeMessage(b, &ans); err != nil {
+				return err
+			}
 		}
-
-		//id, _ := NewID(resp.Data.ID)
-		//fmt.Println(id)
-
-		for k, v := range res.Nodes() {
-			id, _ := NewID([]byte(k))
-			addr, _ := net.ResolveUDPAddr("udp", v)
-
-			//fmt.Println(id, addr)
-
-			n := NewNode2(id, addr)
-			d.route.Append(n)
-
-			d.ping(n)
-		}
-		d.findNode(d.ID())
 	case MsgTypeError:
 		var e KadErrorMessage
 		if err := DecodeMessage(b, &e); err != nil {
@@ -187,7 +189,6 @@ func (d *DHT) handleQueryMessage(q *KadQueryMessage) {
 }
 
 func (d *DHT) handleReplyMessage(r *KadReplyMessage) {
-
 }
 
 func (d *DHT) handleErrorMessage(e *KadErrorMessage) {

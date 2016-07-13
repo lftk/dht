@@ -80,16 +80,16 @@ func (b *Bucket) Random() *Node {
 	if b.Count() == 0 {
 		return nil
 	}
-	var ptr *Node
+	var node *Node
 	i := rand.Intn(b.Count())
 	b.Map(func(n *Node) bool {
 		if i--; i < 0 {
-			ptr = n
+			node = n
 			return false
 		}
 		return true
 	})
-	return ptr
+	return node
 }
 
 // Map all node
