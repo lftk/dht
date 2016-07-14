@@ -35,9 +35,9 @@ type KadMsgHeader struct {
 type KadMsgType int
 
 const (
-	MsgTypeQuery KadMsgType = iota
-	MsgTypeReply
-	MsgTypeError
+	QueryMessage KadMsgType = iota
+	ReplyMessage
+	ErrorMessage
 )
 
 func (h *KadMsgHeader) TID() string {
@@ -47,11 +47,11 @@ func (h *KadMsgHeader) TID() string {
 func (h *KadMsgHeader) Type() (t KadMsgType) {
 	switch h.Y {
 	case "q":
-		t = MsgTypeQuery
+		t = QueryMessage
 	case "r":
-		t = MsgTypeReply
+		t = ReplyMessage
 	case "e":
-		t = MsgTypeError
+		t = ErrorMessage
 	}
 	return
 }
@@ -99,7 +99,17 @@ func NewReplyMessage(id string, data map[string]interface{}) []byte {
 	return b
 }
 
-type KadResponse struct {
+type KadArguments struct {
+	Data struct {
+		ID       string `bencode:"id"`
+		Port     string `bencode:"port"`
+		Token    string `bencode:"token"`
+		Target   string `bencode:"target"`
+		InfoHash string `bencode:"info_hash"`
+	} `bencode:"a"`
+}
+
+type KadValues struct {
 	Data struct {
 		ID     []byte   `bencode:"id"`
 		Token  string   `bencode:"token"`
@@ -108,23 +118,13 @@ type KadResponse struct {
 	} `bencode:"r"`
 }
 
-func (r *KadResponse) Nodes() map[string]string {
+func (v *KadValues) Nodes() map[string]string {
 	nodes := make(map[string]string)
-	for i := 0; i < len(r.Data.Nodes); i += 26 {
-		id := r.Data.Nodes[i : i+20]
-		addr := r.Data.Nodes[i+20 : i+26]
+	for i := 0; i < len(v.Data.Nodes); i += 26 {
+		id := v.Data.Nodes[i : i+20]
+		addr := v.Data.Nodes[i+20 : i+26]
 		nodes[id] = fmt.Sprintf("%d.%d.%d.%d:%d", addr[0], addr[1],
 			addr[2], addr[3], (uint16(addr[4])<<8)|uint16(addr[5]))
 	}
 	return nodes
-}
-
-type KadAnswer struct {
-	Data struct {
-		ID       string `bencode:"id"`
-		Port     string `bencode:"port"`
-		Token    string `bencode:"token"`
-		Target   string `bencode:"target"`
-		InfoHash string `bencode:"info_hash"`
-	} `bencode:"a"`
 }

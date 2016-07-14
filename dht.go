@@ -136,36 +136,33 @@ func (d *DHT) handleMessage(b []byte) error {
 	fmt.Printf("%#v\n", h)
 
 	switch h.Type() {
-	case MsgTypeQuery:
+	case QueryMessage:
 		var q KadQueryMessage
 		if err := DecodeMessage(b, &q); err != nil {
 			return err
 		}
 		d.handleQueryMessage(&q)
-	case MsgTypeReply:
-		switch h.TID() {
-		case "pn", "fn", "gp":
-			var res KadResponse
-			if err := DecodeMessage(b, &res); err != nil {
-				return err
-			}
-			for k, v := range res.Nodes() {
-				id, _ := NewID([]byte(k))
-				addr, _ := net.ResolveUDPAddr("udp", v)
 
-				n := NewNode2(id, addr)
-				d.route.Append(n)
-
-				d.ping(n)
-			}
-			d.findNode(d.ID())
-		case "ap":
-			var ans KadAnswer
-			if err := DecodeMessage(b, &ans); err != nil {
-				return err
-			}
+		var arg KadArguments
+		if err := DecodeMessage(b, &arg); err != nil {
+			return err
 		}
-	case MsgTypeError:
+	case ReplyMessage:
+		var val KadValues
+		if err := DecodeMessage(b, &val); err != nil {
+			return err
+		}
+		for k, v := range val.Nodes() {
+			id, _ := NewID([]byte(k))
+			addr, _ := net.ResolveUDPAddr("udp", v)
+
+			n := NewNode2(id, addr)
+			d.route.Append(n)
+
+			d.ping(n)
+		}
+		d.findNode(d.ID())
+	case ErrorMessage:
 		var e KadErrorMessage
 		if err := DecodeMessage(b, &e); err != nil {
 			return err
