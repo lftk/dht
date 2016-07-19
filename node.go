@@ -14,19 +14,15 @@ type Node struct {
 }
 
 // NewNode returns a node
-func NewNode(id *ID, ip string, port int) *Node {
-	return &Node{
-		id:   id,
-		ip:   ip,
-		port: port,
-	}
-}
-
-func NewNode2(id *ID, addr *net.UDPAddr) *Node {
+func NewNode(id *ID, addr *net.UDPAddr) *Node {
 	return &Node{
 		id:   id,
 		addr: addr,
 	}
+}
+
+func (n *Node) ID() *ID {
+	return n.id
 }
 
 // Addr returns udb address

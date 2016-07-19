@@ -1,5 +1,6 @@
 package dht
 
+/*
 import (
 	"math/rand"
 	"testing"
@@ -34,3 +35,4 @@ func Test_Table_Lookup(t *testing.T) {
 		t.Log(n.id)
 	}
 }
+*/

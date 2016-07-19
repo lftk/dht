@@ -68,6 +68,33 @@ func (e *KadErrorMessage) String() string {
 	return e.Data[1].(string)
 }
 
+type KadMethodType int
+
+const (
+	PingMethod KadMethodType = iota
+	FindNodeMethod
+	GetPeersMethod
+	AnnouncePeerMethod
+)
+
+type KadQueryMethod struct {
+	Q string `bencode:"q"`
+}
+
+func (m *KadQueryMethod) Type() (t KadMethodType) {
+	switch m.Q {
+	case "ping":
+		t = PingMethod
+	case "find_node":
+		t = FindNodeMethod
+	case "get_peers":
+		t = GetPeersMethod
+	case "announce_peer":
+		t = AnnouncePeerMethod
+	}
+	return
+}
+
 type KadQueryMessage struct {
 	T string                 `bencode:"t"`
 	Y string                 `bencode:"y"`
@@ -81,8 +108,8 @@ type KadReplyMessage struct {
 	R map[string]interface{} `bencode:"r"`
 }
 
-func NewQueryMessage(id, q string, data map[string]interface{}) []byte {
-	msg := KadQueryMessage{id, "q", q, data}
+func NewQueryMessage(tid, q string, data map[string]interface{}) []byte {
+	msg := KadQueryMessage{tid, "q", q, data}
 	b, err := bencode.EncodeBytes(&msg)
 	if err != nil {
 		return nil
@@ -90,8 +117,8 @@ func NewQueryMessage(id, q string, data map[string]interface{}) []byte {
 	return b
 }
 
-func NewReplyMessage(id string, data map[string]interface{}) []byte {
-	msg := KadReplyMessage{id, "r", data}
+func NewReplyMessage(tid string, data map[string]interface{}) []byte {
+	msg := KadReplyMessage{tid, "r", data}
 	b, err := bencode.EncodeBytes(&msg)
 	if err != nil {
 		return nil
@@ -127,4 +154,47 @@ func (v *KadValues) Nodes() map[string]string {
 			addr[2], addr[3], (uint16(addr[4])<<8)|uint16(addr[5]))
 	}
 	return nodes
+}
+
+type KadRequest struct {
+	Method string `bencode:"q"`
+	Data   struct {
+		ID       string `bencode:"id"`
+		Port     string `bencode:"port"`
+		Token    string `bencode:"token"`
+		Target   string `bencode:"target"`
+		InfoHash string `bencode:"info_hash"`
+	} `bencode:"a"`
+}
+
+func (q *KadRequest) ID() (id *ID) {
+	id, _ = NewID([]byte(q.Data.ID))
+	return
+}
+
+func (q *KadRequest) Target() (id *ID) {
+	id, _ = NewID([]byte(q.Data.Target))
+	return
+}
+
+func (q *KadRequest) InfoHash() (id *ID) {
+	id, _ = NewID([]byte(q.Data.InfoHash))
+	return
+}
+
+type KadResponse struct {
+	Data struct {
+		ID     []byte   `bencode:"id"`
+		Token  string   `bencode:"token"`
+		Nodes  string   `bencode:"nodes"`
+		Values []string `bencode:"values"`
+	} `bencode:"r"`
+}
+
+func EncodeCompactNode(nodes []*Node) []byte {
+	return nil
+}
+
+func DecodeCompactNode(b []byte) []*Node {
+	return nil
 }

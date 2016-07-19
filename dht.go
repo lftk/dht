@@ -14,6 +14,7 @@ type DHT struct {
 	conn    *net.UDPConn
 	route   *Table
 	handler Handler
+	storage Storage
 }
 
 // NewDHT returns DHT
@@ -70,7 +71,7 @@ func (d *DHT) Route() *Table {
 }
 
 func (d *DHT) loop() {
-	msg := make(chan []byte, 1024)
+	msg := make(chan *udpMessage, 1024)
 	go d.recvMessage(msg)
 
 	d.initialize()
@@ -116,79 +117,106 @@ func (d *DHT) unInitialize() {
 }
 
 func (d *DHT) cleanup() {
-	return
-	fmt.Println("--------------------------------------")
-	d.route.Map(func(b *Bucket) bool {
-		b.Map(func(n *Node) bool {
-			fmt.Println(n)
+	/*
+		fmt.Println("--------------------------------------")
+		d.route.Map(func(b *Bucket) bool {
+			b.Map(func(n *Node) bool {
+				fmt.Println(n)
+				return true
+			})
 			return true
 		})
-		return true
-	})
+	*/
 }
 
-func (d *DHT) handleMessage(b []byte) error {
+func (d *DHT) handleMessage(msg *udpMessage) (err error) {
 	var h KadMsgHeader
-	if err := DecodeMessage(b, &h); err != nil {
-		return err
+	if err = DecodeMessage(msg.data, &h); err != nil {
+		return
 	}
-
-	fmt.Printf("%#v\n", h)
-
 	switch h.Type() {
 	case QueryMessage:
-		var q KadQueryMessage
-		if err := DecodeMessage(b, &q); err != nil {
-			return err
+		var req KadRequest
+		if err = DecodeMessage(msg.data, &req); err != nil {
+			return
 		}
-		d.handleQueryMessage(&q)
-
-		var arg KadArguments
-		if err := DecodeMessage(b, &arg); err != nil {
-			return err
-		}
+		d.handleQueryMessage(h.TID(), msg.addr, &req)
 	case ReplyMessage:
-		var val KadValues
-		if err := DecodeMessage(b, &val); err != nil {
-			return err
+		var res KadResponse
+		if err = DecodeMessage(msg.data, &res); err != nil {
+			return
 		}
-		for k, v := range val.Nodes() {
-			id, _ := NewID([]byte(k))
-			addr, _ := net.ResolveUDPAddr("udp", v)
-
-			n := NewNode2(id, addr)
-			d.route.Append(n)
-
-			d.ping(n)
-		}
-		d.findNode(d.ID())
+		d.handleReplyMessage([]byte(h.TID()), msg.addr, &res)
 	case ErrorMessage:
-		var e KadErrorMessage
-		if err := DecodeMessage(b, &e); err != nil {
-			return err
-		}
-		d.handleErrorMessage(&e)
+		// ...
 	}
-	return nil
+	return
 }
 
-func (d *DHT) handleQueryMessage(q *KadQueryMessage) {
-	switch q.Q {
+func (d *DHT) handleQueryMessage(tid string, addr *net.UDPAddr, req *KadRequest) {
+	node := NewNode(req.ID(), addr)
+	d.route.Append(node)
+
+	switch req.Method {
 	case "ping":
-		d.replyPing(nil)
+		d.replyPing(tid, node)
 	case "find_node":
-		d.replyFindNode(nil)
+		d.replyFindNode(tid, node, req.Target())
 	case "get_peers":
-		d.replyGetPeers(nil)
+		d.replyGetPeers(tid, node, req.InfoHash())
 	case "announce_peer":
-		d.replyAnnouncePeer(nil)
+		d.replyAnnouncePeer(tid, node)
 	}
 }
 
-func (d *DHT) handleReplyMessage(r *KadReplyMessage) {
+func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse) {
+	q, id := decodeTID(tid)
+	switch q {
+	case "ping":
+	case "find_node":
+	case "get_peers":
+	case "announce_peer":
+		_ = id
+	}
 }
 
-func (d *DHT) handleErrorMessage(e *KadErrorMessage) {
+func encodeTID(q string, id uint16) (b []byte) {
+	b = make([]byte, 4)
+	switch q {
+	case "ping":
+		b[0] = 'p'
+		b[1] = 'n'
+	case "find_node":
+		b[0] = 'f'
+		b[1] = 'n'
+	case "get_peers":
+		b[0] = 'g'
+		b[1] = 'p'
+	case "announce_peer":
+		b[0] = 'a'
+		b[1] = 'p'
+	}
+	if id != 0 {
+		b[2] = byte(id & 0xFF00 >> 8)
+		b[3] = byte(id & 0x00FF)
+	}
+	return
+}
+
+func decodeTID(tid []byte) (q string, id uint16) {
+	if len(tid) == 4 {
+		id = (uint16(tid[2]) << 8) | uint16(tid[3])
+		if tid[0] == 'p' && tid[1] == 'n' {
+			q = "ping"
+		} else if tid[0] == 'f' && tid[1] == 'n' {
+			q = "find_node"
+		} else if tid[0] == 'g' && tid[1] == 'p' {
+			q = "get_peers"
+		} else if tid[0] == 'a' && tid[1] == 'p' {
+			q = "announce_peer"
+		}
+	}
+	return
 }
 
 func (d *DHT) ping(n *Node) {
@@ -223,7 +251,12 @@ func (d *DHT) sendMessage(nodes []*Node, msg []byte) {
 	}
 }
 
-func (d *DHT) recvMessage(msg chan []byte) {
+type udpMessage struct {
+	addr *net.UDPAddr
+	data []byte
+}
+
+func (d *DHT) recvMessage(msg chan *udpMessage) {
 	for {
 		buf := make([]byte, d.cfg.PacketSize)
 		n, addr, err := d.conn.ReadFromUDP(buf)
@@ -231,8 +264,8 @@ func (d *DHT) recvMessage(msg chan []byte) {
 			fmt.Println(err)
 			continue
 		}
-		_ = addr
-		msg <- buf[:n]
+
+		msg <- &udpMessage{addr, buf[:n]}
 
 		select {
 		case <-d.exit:
@@ -244,14 +277,45 @@ func (d *DHT) recvMessage(msg chan []byte) {
 func (d *DHT) announcePeer() {
 }
 
-func (d *DHT) replyPing(n *Node) {
+func (d *DHT) replyPing(tid string, n *Node) {
+	data := map[string]interface{}{
+		"id": d.ID().Bytes(),
+	}
+	d.sendMessage([]*Node{n}, NewReplyMessage(tid, data))
 }
 
-func (d *DHT) replyFindNode(n *Node) {
+func (d *DHT) replyFindNode(tid string, n *Node, target *ID) {
+	nodes := d.route.Lookup(target)
+	data := map[string]interface{}{
+		"id":    d.ID().Bytes(),
+		"nodes": EncodeCompactNode(nodes),
+	}
+	d.sendMessage([]*Node{n}, NewReplyMessage(tid, data))
 }
 
-func (d *DHT) replyGetPeers(n *Node) {
+func (d *DHT) replyGetPeers(tid string, n *Node, tor *ID) {
+	data := map[string]interface{}{
+		"id":    d.ID().Bytes(),
+		"token": "111",
+	}
+	if peers := d.storage.GetPeers(tor); peers != nil {
+		data["values"] = nil
+	} else {
+		nodes := d.route.Lookup(tor)
+		data["nodes"] = EncodeCompactNode(nodes)
+	}
+	d.sendMessage([]*Node{n}, NewReplyMessage(tid, data))
 }
 
-func (d *DHT) replyAnnouncePeer(n *Node) {
+func (d *DHT) replyAnnouncePeer(tid string, n *Node) {
+	data := map[string]interface{}{
+		"id": n.ID().Bytes(),
+	}
+	d.sendMessage([]*Node{n}, NewReplyMessage(tid, data))
+}
+
+func (d *DHT) insertNode(id *ID, addr *net.UDPAddr) *Node {
+	n := NewNode(id, addr)
+	d.route.Append(n)
+	return n
 }
