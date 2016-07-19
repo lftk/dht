@@ -98,10 +98,11 @@ func (d *DHT) initialize() {
 		"target": d.ID().Bytes(),
 	}
 	msg := NewQueryMessage("fn", "find_node", data)
+	b, _ := EncodeMessage(msg)
 	for _, route := range d.cfg.Routes {
 		addr, err := net.ResolveUDPAddr("udp", route)
 		if err == nil {
-			d.conn.WriteToUDP(msg, addr)
+			d.conn.WriteToUDP(b, addr)
 		}
 	}
 
@@ -165,19 +166,60 @@ func (d *DHT) handleQueryMessage(tid string, addr *net.UDPAddr, req *KadRequest)
 	case "get_peers":
 		d.replyGetPeers(tid, node, req.InfoHash())
 	case "announce_peer":
-		d.replyAnnouncePeer(tid, node)
+		d.replyAnnouncePeer(tid, node, req)
 	}
 }
 
 func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse) {
+	n := d.find(res.ID())
+	if n != nil {
+		n.Update()
+	} else {
+		d.insertNode(res.ID(), addr)
+	}
+
 	q, id := decodeTID(tid)
 	switch q {
 	case "ping":
 	case "find_node":
+		d.handleFindNode(res.Nodes())
 	case "get_peers":
+		d.handleGetPeers(res.Values(), res.Nodes())
 	case "announce_peer":
 		_ = id
 	}
+}
+
+func (d *DHT) handlePing(res *KadResponse) {
+}
+
+func (d *DHT) handleFindNode(nodes []byte) {
+	for k, v := range DecodeCompactNode(nodes) {
+		id, _ := NewID(k[:])
+		addr, _ := net.ResolveUDPAddr("udp", v)
+		d.insertNode(id, addr)
+	}
+}
+
+func (d *DHT) handleGetPeers(values []string, nodes []byte) {
+	if len(values) > 0 {
+		for _, v := range DecodeCompactPeer(values) {
+			addr, _ := net.ResolveTCPAddr("tcp", v)
+			peer := NewPeer(addr)
+			_ = peer
+			// insert peer node
+		}
+	} else if len(nodes) > 0 {
+		for k, v := range DecodeCompactNode(nodes) {
+			id, _ := NewID(k[:])
+			addr, _ := net.ResolveUDPAddr("udp", v)
+			d.insertNode(id, addr)
+			// insert search node
+		}
+	}
+}
+
+func (d *DHT) handleAnnouncePeer() {
 }
 
 func encodeTID(q string, id uint16) (b []byte) {
@@ -245,9 +287,11 @@ func (d *DHT) getPeers(id *ID) {
 	d.sendMessage(d.route.Lookup(id), msg)
 }
 
-func (d *DHT) sendMessage(nodes []*Node, msg []byte) {
-	for _, node := range nodes {
-		d.conn.WriteToUDP(msg, node.Addr())
+func (d *DHT) sendMessage(nodes []*Node, msg interface{}) {
+	if b, err := EncodeMessage(msg); err == nil {
+		for _, node := range nodes {
+			d.conn.WriteToUDP(b, node.Addr())
+		}
 	}
 }
 
@@ -307,9 +351,11 @@ func (d *DHT) replyGetPeers(tid string, n *Node, tor *ID) {
 	d.sendMessage([]*Node{n}, NewReplyMessage(tid, data))
 }
 
-func (d *DHT) replyAnnouncePeer(tid string, n *Node) {
+func (d *DHT) replyAnnouncePeer(tid string, n *Node, req *KadRequest) {
+	//
+
 	data := map[string]interface{}{
-		"id": n.ID().Bytes(),
+		"id": d.ID().Bytes(),
 	}
 	d.sendMessage([]*Node{n}, NewReplyMessage(tid, data))
 }
@@ -318,4 +364,11 @@ func (d *DHT) insertNode(id *ID, addr *net.UDPAddr) *Node {
 	n := NewNode(id, addr)
 	d.route.Append(n)
 	return n
+}
+
+func (d *DHT) find(id *ID) (n *Node) {
+	if b := d.route.Find(id); b != nil {
+		n = b.Find(id)
+	}
+	return
 }

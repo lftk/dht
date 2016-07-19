@@ -38,10 +38,12 @@ func ResolveID(s string) (*ID, error) {
 	return id, nil
 }
 
+var idRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 // NewRandomID returns a random id
 func NewRandomID() *ID {
 	id := new(ID)
-	n, err := rand.Read(id[:])
+	n, err := idRand.Read(id[:])
 	if err != nil || n != 20 {
 		return ZeroID
 	}
@@ -102,8 +104,4 @@ func (id *ID) Bytes() []byte {
 
 func (id *ID) String() string {
 	return hex.EncodeToString(id[:])
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
 }

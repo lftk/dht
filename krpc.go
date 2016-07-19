@@ -108,22 +108,12 @@ type KadReplyMessage struct {
 	R map[string]interface{} `bencode:"r"`
 }
 
-func NewQueryMessage(tid, q string, data map[string]interface{}) []byte {
-	msg := KadQueryMessage{tid, "q", q, data}
-	b, err := bencode.EncodeBytes(&msg)
-	if err != nil {
-		return nil
-	}
-	return b
+func NewQueryMessage(tid, q string, data map[string]interface{}) *KadQueryMessage {
+	return &KadQueryMessage{tid, "q", q, data}
 }
 
-func NewReplyMessage(tid string, data map[string]interface{}) []byte {
-	msg := KadReplyMessage{tid, "r", data}
-	b, err := bencode.EncodeBytes(&msg)
-	if err != nil {
-		return nil
-	}
-	return b
+func NewReplyMessage(tid string, data map[string]interface{}) *KadReplyMessage {
+	return &KadReplyMessage{tid, "r", data}
 }
 
 type KadArguments struct {
@@ -172,6 +162,14 @@ func (q *KadRequest) ID() (id *ID) {
 	return
 }
 
+func (q *KadRequest) Port() string {
+	return q.Data.Port
+}
+
+func (q *KadRequest) Token() string {
+	return q.Data.Token
+}
+
 func (q *KadRequest) Target() (id *ID) {
 	id, _ = NewID([]byte(q.Data.Target))
 	return
@@ -186,15 +184,36 @@ type KadResponse struct {
 	Data struct {
 		ID     []byte   `bencode:"id"`
 		Token  string   `bencode:"token"`
-		Nodes  string   `bencode:"nodes"`
+		Nodes  []byte   `bencode:"nodes"`
 		Values []string `bencode:"values"`
 	} `bencode:"r"`
+}
+
+func (p *KadResponse) ID() (id *ID) {
+	id, _ = NewID(p.Data.ID)
+	return
+}
+
+func (p *KadResponse) Nodes() []byte {
+	return p.Data.Nodes
+}
+
+func (p *KadResponse) Values() []string {
+	return p.Data.Values
 }
 
 func EncodeCompactNode(nodes []*Node) []byte {
 	return nil
 }
 
-func DecodeCompactNode(b []byte) []*Node {
+func DecodeCompactNode(b []byte) map[[20]byte]string {
+	return nil
+}
+
+func EncodeCompactPeer(peers []*Peer) [][]byte {
+	return nil
+}
+
+func DecodeCompactPeer(b []string) []string {
 	return nil
 }
