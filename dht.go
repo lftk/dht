@@ -15,14 +15,16 @@ type DHT struct {
 	route   *Table
 	handler Handler
 	storage Storage
+	secret  *Secret
 }
 
 // NewDHT returns DHT
 func NewDHT(cfg *Config) *DHT {
 	d := &DHT{
-		cfg:  cfg,
-		buf:  make([]byte, 4096),
-		exit: make(chan bool),
+		cfg:    cfg,
+		buf:    make([]byte, 4096),
+		exit:   make(chan bool),
+		secret: NewSecret(),
 	}
 	if cfg == nil {
 		d.cfg = NewConfig()
@@ -77,12 +79,16 @@ func (d *DHT) loop() {
 	d.initialize()
 
 	cleanup := time.Tick(30 * time.Second)
+	secret := time.Tick(15 * time.Minute)
+
 	for {
 		select {
 		case <-d.exit:
 			goto EXIT
 		case <-cleanup:
 			d.cleanup()
+		case <-secret:
+			d.secret.Update()
 		case m := <-msg:
 			d.handleMessage(m)
 		}
@@ -340,7 +346,7 @@ func (d *DHT) replyFindNode(tid string, n *Node, target *ID) {
 func (d *DHT) replyGetPeers(tid string, n *Node, tor *ID) {
 	data := map[string]interface{}{
 		"id":    d.ID().Bytes(),
-		"token": "111",
+		"token": d.secret.Create(n.Addr().String()),
 	}
 	if peers := d.storage.GetPeers(tor); peers != nil {
 		data["values"] = nil
@@ -352,8 +358,11 @@ func (d *DHT) replyGetPeers(tid string, n *Node, tor *ID) {
 }
 
 func (d *DHT) replyAnnouncePeer(tid string, n *Node, req *KadRequest) {
-	//
-
+	b := d.secret.Match(n.Addr().String(), req.Token())
+	if b == false {
+		// send error message
+		return
+	}
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
 	}

@@ -166,8 +166,8 @@ func (q *KadRequest) Port() string {
 	return q.Data.Port
 }
 
-func (q *KadRequest) Token() string {
-	return q.Data.Token
+func (q *KadRequest) Token() []byte {
+	return []byte(q.Data.Token)
 }
 
 func (q *KadRequest) Target() (id *ID) {

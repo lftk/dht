@@ -18,18 +18,14 @@ func NewSecret() (s *Secret) {
 		old:  make([]byte, 8),
 		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
-	s.Update()
+	s.rand.Read(s.cur)
+	copy(s.old, s.cur)
 	return
 }
 
 func (s *Secret) Update() {
-	if len(s.cur) != 0 {
-		copy(s.old, s.cur)
-	}
+	copy(s.old, s.cur)
 	s.rand.Read(s.cur)
-	if len(s.old) == 0 {
-		copy(s.old, s.cur)
-	}
 }
 
 func (s *Secret) Create(addr string) []byte {
