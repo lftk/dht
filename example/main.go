@@ -34,9 +34,11 @@ func (l *DHTHandler) UnInitialize() {
 	})
 }
 
+/*
 func (l *DHTHandler) HandleError(e *dht.KadError) {
 	fmt.Println("err:", e.Value(), e.String())
 }
+*/
 
 func dhtServer() {
 	cfg := dht.NewConfig()
