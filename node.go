@@ -35,7 +35,8 @@ func (n *Node) Addr() *net.UDPAddr {
 
 // IsGood returns false if (now - n.time) > 15s
 func (n *Node) IsGood() bool {
-	return false
+	sec := time.Since(n.time).Minutes()
+	return sec <= float64(time.Minute*15)
 }
 
 // Update node lasttime

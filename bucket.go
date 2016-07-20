@@ -109,6 +109,24 @@ func (b *Bucket) Random() *Node {
 	return node
 }
 
+func (b *Bucket) RandomID() (id *ID) {
+	id = NewRandomID()
+	for i := 0; i < b.first.LowBit(); i++ {
+		k, _ := b.first.GetBit(i)
+		id.SetBit(i, k)
+	}
+	return
+}
+
+func (b *Bucket) IsGood() bool {
+	sec := time.Since(b.time).Minutes()
+	return sec <= float64(time.Minute*15)
+}
+
+func (b *Bucket) Update() {
+	b.time = time.Now()
+}
+
 // Map all node
 func (b *Bucket) Map(f func(n *Node) bool) {
 	b.handle(func(e *list.Element) bool {

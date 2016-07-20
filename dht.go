@@ -126,16 +126,21 @@ func (d *DHT) unInitialize() {
 }
 
 func (d *DHT) cleanup() {
-	//tor, _ := ResolveID("004aa73f1a3001fb6ecf545336f155123aee4941")
-	//d.getPeers(tor)
-
-	//fmt.Println("--------------------------------------")
 	d.route.Map(func(b *Bucket) bool {
-		b.Map(func(n *Node) bool {
-			//fmt.Println(n)
+		if b.IsGood() {
+			d.cleanupBucket(b)
+		} else {
+			d.findNode(b.RandomID())
+		}
+		return true
+	})
+}
+
+func (d *DHT) cleanupBucket(b *Bucket) {
+	b.Map(func(n *Node) bool {
+		if n.IsGood() == false {
 			d.ping(n)
-			return true
-		})
+		}
 		return true
 	})
 }
@@ -171,7 +176,7 @@ func (d *DHT) handleQueryMessage(tid []byte, addr *net.UDPAddr, req *KadRequest)
 	}
 	d.insertOrUpdate(id, addr)
 
-	fmt.Println("[query]", req.Method, req.ID(), addr)
+	fmt.Println("[query]", req.Method, id, addr)
 
 	switch req.Method {
 	case "ping":
@@ -414,5 +419,6 @@ func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) {
 		} else {
 			b.Insert(id, addr)
 		}
+		b.Update()
 	}
 }
