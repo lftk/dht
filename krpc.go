@@ -149,7 +149,7 @@ func (v *KadValues) Nodes() map[string]string {
 type KadRequest struct {
 	Method string `bencode:"q"`
 	Data   struct {
-		ID       string `bencode:"id"`
+		ID       []byte `bencode:"id"`
 		Port     string `bencode:"port"`
 		Token    string `bencode:"token"`
 		Target   string `bencode:"target"`
@@ -157,10 +157,16 @@ type KadRequest struct {
 	} `bencode:"a"`
 }
 
+func (q *KadRequest) ID() []byte {
+	return q.Data.ID
+}
+
+/*
 func (q *KadRequest) ID() (id *ID) {
 	id, _ = NewID([]byte(q.Data.ID))
 	return
 }
+*/
 
 func (q *KadRequest) Port() string {
 	return q.Data.Port

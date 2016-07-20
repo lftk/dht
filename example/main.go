@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"runtime"
 	"sync"
 
@@ -60,6 +61,22 @@ func main() {
 	cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
 
 	d := dht.NewDHT(cfg)
+
+	http.HandleFunc("/nodes", func(res http.ResponseWriter, req *http.Request) {
+		var i int
+		var s string
+		d.Route().Map(func(b *dht.Bucket) bool {
+			b.Map(func(n *dht.Node) bool {
+				i++
+				s += fmt.Sprintf("%003d %s\n", i, n.String())
+				return true
+			})
+			return true
+		})
+		res.Write([]byte(s))
+	})
+	go http.ListenAndServe(":6882", nil)
+
 	err := d.Run(NewDHTHandler(d))
 	if err != nil {
 		fmt.Println(err)

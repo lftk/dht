@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 )
 
@@ -40,6 +41,26 @@ func (t *Table) Append(n *Node) error {
 		return t.Append(n)
 	}
 	return errors.New("drop this node")
+}
+
+func (t *Table) Insert(id *ID, addr *net.UDPAddr) (*Node, error) {
+	if id.Compare(t.id) == 0 {
+		return nil, errors.New("id equal to table's id")
+	}
+	return t.insert(id, addr)
+}
+
+func (t *Table) insert(id *ID, addr *net.UDPAddr) (n *Node, err error) {
+	if e := t.find(id); e != nil {
+		if n = e.Value.(*Bucket).Insert(id, addr); n != nil {
+			return
+		}
+		if t.selfInBucket(e) && t.splitBucket(e) {
+			return t.insert(id, addr)
+		}
+	}
+	err = errors.New("drop this node")
+	return
 }
 
 func (t *Table) selfInBucket(e *list.Element) bool {

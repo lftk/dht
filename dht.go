@@ -129,10 +129,10 @@ func (d *DHT) cleanup() {
 	//tor, _ := ResolveID("004aa73f1a3001fb6ecf545336f155123aee4941")
 	//d.getPeers(tor)
 
-	fmt.Println("--------------------------------------")
+	//fmt.Println("--------------------------------------")
 	d.route.Map(func(b *Bucket) bool {
 		b.Map(func(n *Node) bool {
-			fmt.Println(n)
+			//fmt.Println(n)
 			d.ping(n)
 			return true
 		})
@@ -165,20 +165,23 @@ func (d *DHT) handleMessage(msg *udpMessage) (err error) {
 }
 
 func (d *DHT) handleQueryMessage(tid []byte, addr *net.UDPAddr, req *KadRequest) {
-	node := NewNode(req.ID(), addr)
-	d.route.Append(node)
+	id, err := NewID(req.ID())
+	if err != nil {
+		return
+	}
+	d.insertOrUpdate(id, addr)
 
-	fmt.Println("query", req.Method)
+	fmt.Println("[query]", req.Method, req.ID(), addr)
 
 	switch req.Method {
 	case "ping":
-		d.replyPing(tid, node)
+		d.replyPing(tid, addr)
 	case "find_node":
-		d.replyFindNode(tid, node, req.Target())
+		d.replyFindNode(tid, addr, req.Target())
 	case "get_peers":
-		d.replyGetPeers(tid, node, req.InfoHash())
+		d.replyGetPeers(tid, addr, req.InfoHash())
 	case "announce_peer":
-		d.replyAnnouncePeer(tid, node, req)
+		d.replyAnnouncePeer(tid, addr, req)
 	}
 }
 
@@ -192,7 +195,7 @@ func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse
 
 	q, id := decodeTID(tid)
 
-	fmt.Println("reply", q, id)
+	fmt.Println("[reply]", q, id, res.ID(), addr)
 
 	switch q {
 	case "ping":
@@ -282,9 +285,13 @@ func (d *DHT) sendQueryMessage(nodes []*Node, q string, id uint16, data map[stri
 	d.sendMessage(nodes, msg)
 }
 
-func (d *DHT) sendReplyMessage(nodes []*Node, tid []byte, data map[string]interface{}) {
+func (d *DHT) sendReplyMessage(addrs []*net.UDPAddr, tid []byte, data map[string]interface{}) {
 	msg := NewReplyMessage(tid, data)
-	d.sendMessage(nodes, msg)
+	if b, err := EncodeMessage(msg); err == nil {
+		for _, addr := range addrs {
+			d.conn.WriteToUDP(b, addr)
+		}
+	}
 }
 
 func (d *DHT) ping(n *Node) {
@@ -345,26 +352,26 @@ func (d *DHT) recvMessage(msg chan *udpMessage) {
 func (d *DHT) announcePeer() {
 }
 
-func (d *DHT) replyPing(tid []byte, n *Node) {
+func (d *DHT) replyPing(tid []byte, addr *net.UDPAddr) {
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
 	}
-	d.sendReplyMessage([]*Node{n}, tid, data)
+	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
 }
 
-func (d *DHT) replyFindNode(tid []byte, n *Node, target *ID) {
+func (d *DHT) replyFindNode(tid []byte, addr *net.UDPAddr, target *ID) {
 	nodes := d.route.Lookup(target)
 	data := map[string]interface{}{
 		"id":    d.ID().Bytes(),
 		"nodes": EncodeCompactNode(nodes),
 	}
-	d.sendReplyMessage([]*Node{n}, tid, data)
+	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
 }
 
-func (d *DHT) replyGetPeers(tid []byte, n *Node, tor *ID) {
+func (d *DHT) replyGetPeers(tid []byte, addr *net.UDPAddr, tor *ID) {
 	data := map[string]interface{}{
 		"id":    d.ID().Bytes(),
-		"token": d.secret.Create(n.Addr().String()),
+		"token": d.secret.Create(addr.String()),
 	}
 	if peers := d.storage.GetPeers(tor); peers != nil {
 		data["values"] = nil
@@ -372,11 +379,11 @@ func (d *DHT) replyGetPeers(tid []byte, n *Node, tor *ID) {
 		nodes := d.route.Lookup(tor)
 		data["nodes"] = EncodeCompactNode(nodes)
 	}
-	d.sendReplyMessage([]*Node{n}, tid, data)
+	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
 }
 
-func (d *DHT) replyAnnouncePeer(tid []byte, n *Node, req *KadRequest) {
-	b := d.secret.Match(n.Addr().String(), req.Token())
+func (d *DHT) replyAnnouncePeer(tid []byte, addr *net.UDPAddr, req *KadRequest) {
+	b := d.secret.Match(addr.String(), req.Token())
 	if b == false {
 		// send error message
 		return
@@ -384,7 +391,7 @@ func (d *DHT) replyAnnouncePeer(tid []byte, n *Node, req *KadRequest) {
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
 	}
-	d.sendReplyMessage([]*Node{n}, tid, data)
+	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
 }
 
 func (d *DHT) insertNode(id *ID, addr *net.UDPAddr) *Node {
@@ -398,4 +405,14 @@ func (d *DHT) find(id *ID) (n *Node) {
 		n = b.Find(id)
 	}
 	return
+}
+
+func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) {
+	if b := d.route.Find(id); b != nil {
+		if n := b.Find(id); n != nil {
+			n.Update()
+		} else {
+			b.Insert(id, addr)
+		}
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"time"
 )
 
@@ -49,6 +50,22 @@ func (b *Bucket) Append(n *Node) error {
 		b.nodes.PushBack(n)
 	}
 	return nil
+}
+
+func (b *Bucket) Insert(id *ID, addr *net.UDPAddr) (n *Node) {
+	b.handle(func(e *list.Element) bool {
+		if e.Value.(*Node).id.Compare(id) == 0 {
+			n = e.Value.(*Node)
+			b.nodes.MoveToBack(e)
+			return false
+		}
+		return true
+	})
+	if n == nil && b.Count() != maxNodeCount {
+		n = NewNode(id, addr)
+		b.nodes.PushBack(n)
+	}
+	return
 }
 
 // Remove a node, return true if exist node
