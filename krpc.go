@@ -28,7 +28,7 @@ func encodeMessage(msg interface{}) ([]byte, error) {
 }
 
 type KadMsgHeader struct {
-	T string `bencode:"t"`
+	T []byte `bencode:"t"`
 	Y string `bencode:"y"`
 }
 
@@ -40,7 +40,7 @@ const (
 	ErrorMessage
 )
 
-func (h *KadMsgHeader) TID() string {
+func (h *KadMsgHeader) TID() []byte {
 	return h.T
 }
 
@@ -96,23 +96,23 @@ func (m *KadQueryMethod) Type() (t KadMethodType) {
 }
 
 type KadQueryMessage struct {
-	T string                 `bencode:"t"`
+	T []byte                 `bencode:"t"`
 	Y string                 `bencode:"y"`
 	Q string                 `bencode:"q"`
 	A map[string]interface{} `bencode:"a"`
 }
 
 type KadReplyMessage struct {
-	T string                 `bencode:"t"`
+	T []byte                 `bencode:"t"`
 	Y string                 `bencode:"y"`
 	R map[string]interface{} `bencode:"r"`
 }
 
-func NewQueryMessage(tid, q string, data map[string]interface{}) *KadQueryMessage {
+func NewQueryMessage(tid []byte, q string, data map[string]interface{}) *KadQueryMessage {
 	return &KadQueryMessage{tid, "q", q, data}
 }
 
-func NewReplyMessage(tid string, data map[string]interface{}) *KadReplyMessage {
+func NewReplyMessage(tid []byte, data map[string]interface{}) *KadReplyMessage {
 	return &KadReplyMessage{tid, "r", data}
 }
 
@@ -207,7 +207,15 @@ func EncodeCompactNode(nodes []*Node) []byte {
 }
 
 func DecodeCompactNode(b []byte) map[[20]byte]string {
-	return nil
+	nodes := make(map[[20]byte]string)
+	for i := 0; i < len(b); i += 26 {
+		var id [20]byte
+		copy(id[:], b[i:i+20])
+		addr := b[i+20 : i+26]
+		nodes[id] = fmt.Sprintf("%d.%d.%d.%d:%d", addr[0], addr[1],
+			addr[2], addr[3], (uint16(addr[4])<<8)|uint16(addr[5]))
+	}
+	return nodes
 }
 
 func EncodeCompactPeer(peers []*Peer) [][]byte {

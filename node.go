@@ -8,9 +8,10 @@ import (
 
 // Node represent a dht peer
 type Node struct {
-	id   *ID
-	addr *net.UDPAddr
-	time time.Time
+	id     *ID
+	addr   *net.UDPAddr
+	time   time.Time
+	pinged int8
 }
 
 // NewNode returns a node

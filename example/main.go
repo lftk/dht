@@ -55,9 +55,20 @@ func dhtServer() {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
+	cfg := dht.NewConfig()
+	cfg.Address = ":6881"
+	cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
+
+	d := dht.NewDHT(cfg)
+	err := d.Run(NewDHTHandler(d))
+	if err != nil {
+		fmt.Println(err)
+	}
+	return
+
 	var w sync.WaitGroup
 	w.Add(1)
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 100; i++ {
 		go func() {
 			defer w.Done()
 			dhtServer()
