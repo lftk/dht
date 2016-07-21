@@ -214,11 +214,13 @@ func (t *Table) handle(f func(e *list.Element) bool) {
 	}
 }
 
-func (t *Table) String() string {
-	s := fmt.Sprintf("%v\n", t.id)
+func (t *Table) String() (s string) {
+	var n int
 	t.Map(func(b *Bucket) bool {
+		n += b.Count()
 		s += fmt.Sprintf("%v\n", b)
 		return true
 	})
-	return s
+	s = fmt.Sprintf("%v %d\n\n", t.id, n) + s
+	return
 }

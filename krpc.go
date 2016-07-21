@@ -197,9 +197,8 @@ type KadResponse struct {
 	} `bencode:"r"`
 }
 
-func (p *KadResponse) ID() (id *ID) {
-	id, _ = NewID(p.Data.ID)
-	return
+func (p *KadResponse) ID() []byte {
+	return p.Data.ID
 }
 
 func (p *KadResponse) Nodes() []byte {

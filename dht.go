@@ -2,6 +2,7 @@ package dht
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"time"
 )
@@ -182,7 +183,9 @@ func (d *DHT) handleQueryMessage(tid []byte, addr *net.UDPAddr, req *KadRequest)
 	}
 	d.insertOrUpdate(id, addr)
 
-	fmt.Println("[query]", req.Method, id, addr)
+	if req.Method == "get_peers" || req.Method == "announce_peer" {
+		fmt.Println("[query]", req.Method, id, addr)
+	}
 
 	switch req.Method {
 	case "ping":
@@ -197,16 +200,17 @@ func (d *DHT) handleQueryMessage(tid []byte, addr *net.UDPAddr, req *KadRequest)
 }
 
 func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse) {
-	n := d.find(res.ID())
-	if n != nil {
-		n.Update()
-	} else {
-		d.insertNode(res.ID(), addr)
+	id, err := NewID(res.ID())
+	if err != nil {
+		return
 	}
+	d.insertOrUpdate(id, addr)
 
-	q, id := decodeTID(tid)
+	q, no := decodeTID(tid)
 
-	fmt.Println("[reply]", q, id, res.ID(), addr)
+	if q == "get_peers" || q == "announce_peer" {
+		fmt.Println("[reply]", q, no, id, addr)
+	}
 
 	switch q {
 	case "ping":
@@ -216,6 +220,8 @@ func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse
 		d.handleGetPeers(res.Values(), res.Nodes())
 	case "announce_peer":
 		_ = id
+	default:
+		fmt.Println(string(tid), len(tid))
 	}
 }
 
@@ -246,46 +252,7 @@ func (d *DHT) handleGetPeers(values []string, nodes []byte) {
 func (d *DHT) handleAnnouncePeer() {
 }
 
-func encodeTID(q string, id uint16) (b []byte) {
-	b = make([]byte, 4)
-	switch q {
-	case "ping":
-		b[0] = 'p'
-		b[1] = 'n'
-	case "find_node":
-		b[0] = 'f'
-		b[1] = 'n'
-	case "get_peers":
-		b[0] = 'g'
-		b[1] = 'p'
-	case "announce_peer":
-		b[0] = 'a'
-		b[1] = 'p'
-	}
-	if id != 0 {
-		b[2] = byte(id & 0xFF00 >> 8)
-		b[3] = byte(id & 0x00FF)
-	}
-	return
-}
-
-func decodeTID(tid []byte) (q string, id uint16) {
-	if len(tid) == 4 {
-		id = (uint16(tid[2]) << 8) | uint16(tid[3])
-		if tid[0] == 'p' && tid[1] == 'n' {
-			q = "ping"
-		} else if tid[0] == 'f' && tid[1] == 'n' {
-			q = "find_node"
-		} else if tid[0] == 'g' && tid[1] == 'p' {
-			q = "get_peers"
-		} else if tid[0] == 'a' && tid[1] == 'p' {
-			q = "announce_peer"
-		}
-	}
-	return
-}
-
-func (d *DHT) sendQueryMessage(nodes []*Node, q string, id uint16, data map[string]interface{}) {
+func (d *DHT) sendQueryMessage(nodes []*Node, q string, id int16, data map[string]interface{}) {
 	tid := encodeTID(q, id)
 	msg := NewQueryMessage(tid, q, data)
 	d.sendMessage(nodes, msg)
@@ -428,4 +395,41 @@ func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) {
 		}
 		b.Update()
 	}
+}
+
+var (
+	tids = map[string]string{
+		"ping": "pnpn", "find_node": "fnfn",
+		"get_peers": "gpgp", "announce_peer": "apap",
+	}
+	vals = map[string]string{
+		"pn": "ping", "fn": "find_node",
+		"gp": "get_peers", "ap": "announce_peer",
+	}
+)
+
+func encodeTID(q string, id int16) (val []byte) {
+	if tid, ok := tids[q]; ok {
+		uid := uint16(id)
+		if id < 0 {
+			uid = math.MaxUint16
+		}
+		val = []byte(tid)
+		val[2] = byte(uid & 0xFF00 >> 8)
+		val[3] = byte(uid & 0x00FF)
+	}
+	return
+}
+
+func decodeTID(tid []byte) (q string, id int16) {
+	if len(tid) == 4 {
+		if val, ok := vals[string(tid[:2])]; ok {
+			uid := (uint16(tid[2]) << 8) | uint16(tid[3])
+			if uid != math.MaxUint16 {
+				id = int16(uid)
+			}
+			q = val
+		}
+	}
+	return
 }

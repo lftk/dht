@@ -1,10 +1,6 @@
 package dht
 
-import (
-	"testing"
-
-	"github.com/zeebo/bencode"
-)
+import "testing"
 
 func Test_packet_Marshal(t *testing.T) {
 }
@@ -19,12 +15,14 @@ func Test_packet_Unmarshal(t *testing.T) {
 }
 
 func Test_newQueryMessage(t *testing.T) {
-	id := NewRandomID()
-	data := map[string]interface{}{"id": id.Bytes()}
-	msg := NewQueryMessage("pn", "ping", data)
-	b, err := bencode.EncodeBytes(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(string(b))
+	/*
+		id := NewRandomID()
+		data := map[string]interface{}{"id": id.Bytes()}
+		msg := NewQueryMessage("pn", "ping", data)
+		b, err := bencode.EncodeBytes(msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(string(b))
+	*/
 }
