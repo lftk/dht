@@ -1,7 +1,9 @@
 package dht
 
 import (
+	"bytes"
 	"fmt"
+	"net"
 
 	"github.com/zeebo/bencode"
 )
@@ -208,18 +210,37 @@ func (p *KadResponse) Values() []string {
 	return p.Data.Values
 }
 
-func EncodeCompactNode(nodes []*Node) []byte {
-	return nil
+func EncodeCompactNode(nodes map[*ID]*net.UDPAddr) []byte {
+	ip := make([]byte, 4)
+	buf := bytes.NewBuffer(nil)
+	for id, addr := range nodes {
+		n, err := fmt.Sscanf(addr.IP.String(), "%d.%d.%d.%d", &ip[0], &ip[1], &ip[2], &ip[3])
+		if err != nil || n != 4 {
+			continue
+		}
+		buf.Write(id.Bytes())
+		buf.Write(ip)
+		buf.WriteByte(byte(addr.Port >> 8))
+		buf.WriteByte(byte(addr.Port))
+	}
+	return buf.Bytes()
 }
 
-func DecodeCompactNode(b []byte) map[[20]byte]string {
-	nodes := make(map[[20]byte]string)
-	for i := 0; i < len(b); i += 26 {
-		var id [20]byte
-		copy(id[:], b[i:i+20])
-		addr := b[i+20 : i+26]
-		nodes[id] = fmt.Sprintf("%d.%d.%d.%d:%d", addr[0], addr[1],
-			addr[2], addr[3], (uint16(addr[4])<<8)|uint16(addr[5]))
+func DecodeCompactNode(b []byte) map[*ID]*net.UDPAddr {
+	nodes := make(map[*ID]*net.UDPAddr)
+	for i := 0; i < len(b)/26; i++ {
+		bi := b[i*26:]
+		id, err := NewID(bi[:20])
+		if err != nil {
+			continue
+		}
+		s := fmt.Sprintf("%d.%d.%d.%d:%d", bi[20], bi[21],
+			bi[22], bi[23], (uint16(bi[24])<<8)|uint16(bi[25]))
+		addr, err := net.ResolveUDPAddr("udp", s)
+		if err != nil {
+			continue
+		}
+		nodes[id] = addr
 	}
 	return nodes
 }

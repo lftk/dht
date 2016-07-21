@@ -119,8 +119,7 @@ func (b *Bucket) RandomID() (id *ID) {
 }
 
 func (b *Bucket) IsGood() bool {
-	sec := time.Since(b.time).Minutes()
-	return sec <= float64(time.Minute*15)
+	return time.Since(b.time).Minutes() <= 15.0
 }
 
 func (b *Bucket) Update() {

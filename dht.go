@@ -126,7 +126,9 @@ func (d *DHT) unInitialize() {
 }
 
 func (d *DHT) cleanup() {
+	var count int
 	d.route.Map(func(b *Bucket) bool {
+		count += b.Count()
 		if b.IsGood() {
 			d.cleanupBucket(b)
 		} else {
@@ -134,9 +136,13 @@ func (d *DHT) cleanup() {
 		}
 		return true
 	})
+	if d.cfg.MinNodes > 0 && count < d.cfg.MinNodes {
+		d.findNode(NewRandomID())
+	}
 }
 
 func (d *DHT) cleanupBucket(b *Bucket) {
+	d.findNode(b.RandomID())
 	b.Map(func(n *Node) bool {
 		if n.IsGood() == false {
 			d.ping(n)
@@ -217,10 +223,8 @@ func (d *DHT) handlePing(res *KadResponse) {
 }
 
 func (d *DHT) handleFindNode(nodes []byte) {
-	for k, v := range DecodeCompactNode(nodes) {
-		id, _ := NewID(k[:])
-		addr, _ := net.ResolveUDPAddr("udp", v)
-		d.insertNode(id, addr)
+	for id, addr := range DecodeCompactNode(nodes) {
+		d.insertOrUpdate(id, addr)
 	}
 }
 
@@ -233,11 +237,8 @@ func (d *DHT) handleGetPeers(values []string, nodes []byte) {
 			// insert peer node
 		}
 	} else if len(nodes) > 0 {
-		for k, v := range DecodeCompactNode(nodes) {
-			id, _ := NewID(k[:])
-			addr, _ := net.ResolveUDPAddr("udp", v)
-			d.insertNode(id, addr)
-			// insert search node
+		for id, addr := range DecodeCompactNode(nodes) {
+			d.insertOrUpdate(id, addr)
 		}
 	}
 }
@@ -365,7 +366,10 @@ func (d *DHT) replyPing(tid []byte, addr *net.UDPAddr) {
 }
 
 func (d *DHT) replyFindNode(tid []byte, addr *net.UDPAddr, target *ID) {
-	nodes := d.route.Lookup(target)
+	nodes := make(map[*ID]*net.UDPAddr)
+	for _, n := range d.route.Lookup(target) {
+		nodes[n.ID()] = n.Addr()
+	}
 	data := map[string]interface{}{
 		"id":    d.ID().Bytes(),
 		"nodes": EncodeCompactNode(nodes),
@@ -381,7 +385,10 @@ func (d *DHT) replyGetPeers(tid []byte, addr *net.UDPAddr, tor *ID) {
 	if peers := d.storage.GetPeers(tor); peers != nil {
 		data["values"] = nil
 	} else {
-		nodes := d.route.Lookup(tor)
+		nodes := make(map[*ID]*net.UDPAddr)
+		for _, n := range d.route.Lookup(tor) {
+			nodes[n.ID()] = n.Addr()
+		}
 		data["nodes"] = EncodeCompactNode(nodes)
 	}
 	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
@@ -417,7 +424,7 @@ func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) {
 		if n := b.Find(id); n != nil {
 			n.Update()
 		} else {
-			b.Insert(id, addr)
+			d.route.Insert(id, addr)
 		}
 		b.Update()
 	}

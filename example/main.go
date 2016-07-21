@@ -58,17 +58,21 @@ func main() {
 
 	cfg := dht.NewConfig()
 	cfg.Address = ":6881"
+	cfg.MinNodes = 512
 	cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
 
 	d := dht.NewDHT(cfg)
 
 	http.HandleFunc("/nodes", func(res http.ResponseWriter, req *http.Request) {
+		res.Write([]byte(d.Route().String()))
+		return
+
 		var i int
 		var s string
 		d.Route().Map(func(b *dht.Bucket) bool {
 			b.Map(func(n *dht.Node) bool {
 				i++
-				s += fmt.Sprintf("%003d %s\n", i, n.String())
+				s += fmt.Sprintf("%04d %s\n", i, n.String())
 				return true
 			})
 			return true
