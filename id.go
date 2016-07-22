@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -39,9 +40,13 @@ func ResolveID(s string) (*ID, error) {
 }
 
 var idRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+var idLock = new(sync.RWMutex)
 
 // NewRandomID returns a random id
 func NewRandomID() *ID {
+	//	idLock.Lock()
+	//	defer idLock.Unlock()
+
 	id := new(ID)
 	n, err := idRand.Read(id[:])
 	if err != nil || n != 20 {

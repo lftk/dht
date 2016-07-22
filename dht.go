@@ -129,21 +129,33 @@ func (d *DHT) unInitialize() {
 func (d *DHT) cleanup() {
 	var count int
 	d.route.Map(func(b *Bucket) bool {
+		node := b.Random()
+		if node != nil {
+			d.findNode(node.ID())
+		}
 		count += b.Count()
 		if b.IsGood() {
 			d.cleanupBucket(b)
 		} else {
-			d.findNode(b.RandomID())
+			//d.findNode(b.RandomID())
 		}
 		return true
 	})
-	if d.cfg.MinNodes > 0 && count < d.cfg.MinNodes {
-		d.findNode(NewRandomID())
+
+	if d.handler != nil {
+		d.handler.Cleanup()
 	}
+
+	/*
+		if d.cfg.MinNodes <= 0 || count < d.cfg.MinNodes {
+			id := NewRandomID()
+			fmt.Println(id)
+			d.findNode(id)
+		}
+	*/
 }
 
 func (d *DHT) cleanupBucket(b *Bucket) {
-	d.findNode(b.RandomID())
 	b.Map(func(n *Node) bool {
 		if n.IsGood() == false {
 			d.ping(n)
@@ -161,6 +173,8 @@ func (d *DHT) handleMessage(msg *udpMessage) (err error) {
 	case QueryMessage:
 		var req KadRequest
 		if err = DecodeMessage(msg.data, &req); err != nil {
+			fmt.Println(string(msg.data))
+			fmt.Println(err)
 			return
 		}
 		d.handleQueryMessage(h.TID(), msg.addr, &req)
@@ -183,10 +197,6 @@ func (d *DHT) handleQueryMessage(tid []byte, addr *net.UDPAddr, req *KadRequest)
 	}
 	d.insertOrUpdate(id, addr)
 
-	if req.Method == "get_peers" || req.Method == "announce_peer" {
-		fmt.Println("[query]", req.Method, id, addr)
-	}
-
 	switch req.Method {
 	case "ping":
 		d.replyPing(tid, addr)
@@ -208,7 +218,7 @@ func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse
 
 	q, no := decodeTID(tid)
 
-	if q == "get_peers" || q == "announce_peer" {
+	if /*q == "get_peers" || */ q == "announce_peer" {
 		fmt.Println("[reply]", q, no, id, addr)
 	}
 
@@ -221,7 +231,7 @@ func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse
 	case "announce_peer":
 		_ = id
 	default:
-		fmt.Println(string(tid), len(tid))
+		//fmt.Println(string(tid), len(tid))
 	}
 }
 
@@ -272,6 +282,10 @@ func (d *DHT) ping(n *Node) {
 		"id": d.ID().Bytes(),
 	}
 	d.sendQueryMessage([]*Node{n}, "ping", 0, data)
+}
+
+func (d *DHT) FindNode(id *ID) {
+	d.findNode(id)
 }
 
 func (d *DHT) findNode(id *ID) {
@@ -359,6 +373,10 @@ func (d *DHT) replyGetPeers(tid []byte, addr *net.UDPAddr, tor *ID) {
 		data["nodes"] = EncodeCompactNode(nodes)
 	}
 	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
+
+	if d.handler != nil {
+		d.handler.GetPeers(tor)
+	}
 }
 
 func (d *DHT) replyAnnouncePeer(tid []byte, addr *net.UDPAddr, req *KadRequest) {
@@ -371,6 +389,10 @@ func (d *DHT) replyAnnouncePeer(tid []byte, addr *net.UDPAddr, req *KadRequest) 
 		"id": d.ID().Bytes(),
 	}
 	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
+
+	if d.handler != nil {
+		d.handler.AnnouncePeer(req.InfoHash(), nil)
+	}
 }
 
 func (d *DHT) insertNode(id *ID, addr *net.UDPAddr) *Node {
@@ -391,7 +413,10 @@ func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) {
 		if n := b.Find(id); n != nil {
 			n.Update()
 		} else {
-			d.route.Insert(id, addr)
+			_, err := d.route.Insert(id, addr)
+			if err != nil {
+				fmt.Println(err, id, addr)
+			}
 		}
 		b.Update()
 	}

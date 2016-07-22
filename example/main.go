@@ -20,8 +20,8 @@ func NewDHTHandler(d *dht.DHT) dht.Handler {
 }
 
 func (l *DHTHandler) Initialize() {
-	fmt.Println(l.d.ID())
-	fmt.Println(l.d.Addr())
+	//	fmt.Println(l.d.ID())
+	//	fmt.Println(l.d.Addr())
 }
 
 func (l *DHTHandler) UnInitialize() {
@@ -33,6 +33,30 @@ func (l *DHTHandler) UnInitialize() {
 		})
 		return true
 	})
+}
+
+func (l *DHTHandler) Cleanup() {
+	l.d.FindNode(l.d.ID())
+}
+
+var tid2 int
+var tors2 string
+
+func (l *DHTHandler) GetPeers(tor *dht.ID) {
+	tid2++
+	s := fmt.Sprintln(tid2, tor)
+	fmt.Print(s)
+	tors2 = s + tors2
+}
+
+var tid int
+var tors string
+
+func (l *DHTHandler) AnnouncePeer(tor *dht.ID, peer *dht.Peer) {
+	tid++
+	s := fmt.Sprintln(tid, tor)
+	fmt.Print(s)
+	tors = s + tors
 }
 
 /*
@@ -53,47 +77,47 @@ func dhtServer() {
 	}
 }
 
+func dhtNodeNums(d *dht.DHT) (n int) {
+	d.Route().Map(func(b *dht.Bucket) bool {
+		n += b.Count()
+		return true
+	})
+	return
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	cfg := dht.NewConfig()
-	cfg.Address = ":6881"
-	cfg.MinNodes = 512
-	cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
-
-	d := dht.NewDHT(cfg)
-
-	http.HandleFunc("/nodes", func(res http.ResponseWriter, req *http.Request) {
-		res.Write([]byte(d.Route().String()))
-		return
-
-		var i int
-		var s string
-		d.Route().Map(func(b *dht.Bucket) bool {
-			b.Map(func(n *dht.Node) bool {
-				i++
-				s += fmt.Sprintf("%04d %s\n", i, n.String())
-				return true
-			})
-			return true
-		})
-		res.Write([]byte(s))
-	})
-	go http.ListenAndServe(":6882", nil)
-
-	err := d.Run(NewDHTHandler(d))
-	if err != nil {
-		fmt.Println(err)
-	}
-	return
+	var dhts []*dht.DHT
 
 	var w sync.WaitGroup
 	w.Add(1)
-	for i := 0; i < 100; i++ {
+	for i := 0; i < runtime.NumCPU(); i++ {
+		cfg := dht.NewConfig()
+		//cfg.MinNodes = 512
+		d := dht.NewDHT(cfg)
+		dhts = append(dhts, d)
 		go func() {
 			defer w.Done()
-			dhtServer()
+			d.Run(NewDHTHandler(d))
 		}()
 	}
+
+	//	cfg.Address = ":6881"
+	//	cfg.ID, _ = dht.ResolveID("7c8e2aab1f3117120450ebde3e9c0bc82bdf0b59")
+
+	http.HandleFunc("/dht", func(res http.ResponseWriter, req *http.Request) {
+		for i, d := range dhts {
+			s := fmt.Sprintf("%02d %s %04d\n", i, d.ID(), dhtNodeNums(d))
+			res.Write([]byte(s))
+		}
+		fmt.Fprintln(res, "---------------------------------------------------")
+		res.Write([]byte(tors))
+		fmt.Fprintln(res, "---------------------------------------------------")
+		res.Write([]byte(tors2))
+		return
+	})
+	go http.ListenAndServe(":6882", nil)
+
 	w.Wait()
 }

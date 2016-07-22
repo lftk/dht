@@ -152,7 +152,7 @@ type KadRequest struct {
 	Method string `bencode:"q"`
 	Data   struct {
 		ID       []byte `bencode:"id"`
-		Port     string `bencode:"port"`
+		Port     int64  `bencode:"port"`
 		Token    string `bencode:"token"`
 		Target   string `bencode:"target"`
 		InfoHash string `bencode:"info_hash"`
@@ -170,7 +170,7 @@ func (q *KadRequest) ID() (id *ID) {
 }
 */
 
-func (q *KadRequest) Port() string {
+func (q *KadRequest) Port() int64 {
 	return q.Data.Port
 }
 
