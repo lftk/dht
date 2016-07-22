@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const maxNodeCount int = 8
+const maxNodeCount int = 64
 
 // Bucket type
 type Bucket struct {

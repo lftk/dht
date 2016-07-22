@@ -34,6 +34,17 @@ func NewDHT(cfg *Config) *DHT {
 	return d
 }
 
+func NewDHT2(id *ID, conn *net.UDPConn, handler Handler) *DHT {
+	d := &DHT{
+		conn:    conn,
+		exit:    make(chan bool),
+		secret:  NewSecret(),
+		handler: handler,
+	}
+	d.route = NewTable(id)
+	return d
+}
+
 // Run dht server
 func (d *DHT) Run(handler Handler) (err error) {
 	conn, err := net.ListenPacket("udp", d.cfg.Address)
@@ -54,10 +65,12 @@ func (d *DHT) Exit() {
 
 // ID returns dht id
 func (d *DHT) ID() *ID {
-	if d.cfg.ID == nil {
-		d.cfg.ID = NewRandomID()
-	}
-	return d.cfg.ID
+	return d.route.id
+}
+
+// Conn returns dht connection
+func (d *DHT) Conn() *net.UDPConn {
+	return d.conn
 }
 
 // Addr returns dht address
@@ -129,8 +142,7 @@ func (d *DHT) unInitialize() {
 func (d *DHT) cleanup() {
 	var count int
 	d.route.Map(func(b *Bucket) bool {
-		node := b.Random()
-		if node != nil {
+		if node := b.Random(); node != nil {
 			d.findNode(node.ID())
 		}
 		count += b.Count()
@@ -145,14 +157,6 @@ func (d *DHT) cleanup() {
 	if d.handler != nil {
 		d.handler.Cleanup()
 	}
-
-	/*
-		if d.cfg.MinNodes <= 0 || count < d.cfg.MinNodes {
-			id := NewRandomID()
-			fmt.Println(id)
-			d.findNode(id)
-		}
-	*/
 }
 
 func (d *DHT) cleanupBucket(b *Bucket) {
@@ -284,24 +288,36 @@ func (d *DHT) ping(n *Node) {
 	d.sendQueryMessage([]*Node{n}, "ping", 0, data)
 }
 
+func (d *DHT) FindNodeFromAddr(id *ID, addr *net.UDPAddr) error {
+	data := map[string]interface{}{
+		"id":     d.ID().Bytes(),
+		"target": id.Bytes(),
+	}
+	return d.queryMessage("find_node", 0, addr, data)
+}
+
 func (d *DHT) FindNode(id *ID) {
 	d.findNode(id)
 }
 
 func (d *DHT) findNode(id *ID) {
-	data := map[string]interface{}{
-		"id":     d.ID().Bytes(),
-		"target": id.Bytes(),
+	if addrs := d.lookup(id); addrs != nil {
+		data := map[string]interface{}{
+			"id":     d.ID().Bytes(),
+			"target": id.Bytes(),
+		}
+		d.batchQueryMessage("find_node", 0, addrs, data)
 	}
-	d.sendQueryMessage(d.route.Lookup(id), "find_node", 0, data)
 }
 
 func (d *DHT) getPeers(id *ID) {
-	data := map[string]interface{}{
-		"id":        d.ID().Bytes(),
-		"info_hash": id.Bytes(),
+	if addrs := d.lookup(id); addrs != nil {
+		data := map[string]interface{}{
+			"id":        d.ID().Bytes(),
+			"info_hash": id.Bytes(),
+		}
+		d.batchQueryMessage("get_peers", 0, addrs, data)
 	}
-	d.sendQueryMessage(d.route.Lookup(id), "get_peers", 0, data)
 }
 
 func (d *DHT) sendMessage(nodes []*Node, msg interface{}) {
@@ -310,6 +326,14 @@ func (d *DHT) sendMessage(nodes []*Node, msg interface{}) {
 			d.conn.WriteToUDP(b, node.Addr())
 		}
 	}
+}
+
+func (d *DHT) HandleMessage(addr *net.UDPAddr, data []byte) error {
+	return d.handleMessage(&udpMessage{addr, data})
+}
+
+func (d *DHT) Cleanup() {
+	d.cleanup()
 }
 
 type udpMessage struct {
@@ -343,19 +367,17 @@ func (d *DHT) replyPing(tid []byte, addr *net.UDPAddr) {
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
 	}
-	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
+	d.replyMessage(tid, addr, data)
 }
 
 func (d *DHT) replyFindNode(tid []byte, addr *net.UDPAddr, target *ID) {
-	nodes := make(map[*ID]*net.UDPAddr)
-	for _, n := range d.route.Lookup(target) {
-		nodes[n.ID()] = n.Addr()
+	if nodes := d.route.Lookup(target); nodes != nil {
+		data := map[string]interface{}{
+			"id":    d.ID().Bytes(),
+			"nodes": encodeCompactNodes(nodes),
+		}
+		d.replyMessage(tid, addr, data)
 	}
-	data := map[string]interface{}{
-		"id":    d.ID().Bytes(),
-		"nodes": EncodeCompactNode(nodes),
-	}
-	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
 }
 
 func (d *DHT) replyGetPeers(tid []byte, addr *net.UDPAddr, tor *ID) {
@@ -365,14 +387,10 @@ func (d *DHT) replyGetPeers(tid []byte, addr *net.UDPAddr, tor *ID) {
 	}
 	if peers := d.storage.GetPeers(tor); peers != nil {
 		data["values"] = nil
-	} else {
-		nodes := make(map[*ID]*net.UDPAddr)
-		for _, n := range d.route.Lookup(tor) {
-			nodes[n.ID()] = n.Addr()
-		}
-		data["nodes"] = EncodeCompactNode(nodes)
+	} else if nodes := d.route.Lookup(tor); nodes != nil {
+		data["nodes"] = encodeCompactNodes(nodes)
 	}
-	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
+	d.replyMessage(tid, addr, data)
 
 	if d.handler != nil {
 		d.handler.GetPeers(tor)
@@ -388,7 +406,7 @@ func (d *DHT) replyAnnouncePeer(tid []byte, addr *net.UDPAddr, req *KadRequest) 
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
 	}
-	d.sendReplyMessage([]*net.UDPAddr{addr}, tid, data)
+	d.replyMessage(tid, addr, data)
 
 	if d.handler != nil {
 		d.handler.AnnouncePeer(req.InfoHash(), nil)
@@ -415,11 +433,69 @@ func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) {
 		} else {
 			_, err := d.route.Insert(id, addr)
 			if err != nil {
-				fmt.Println(err, id, addr)
+				//fmt.Println(err, id, addr)
 			}
 		}
 		b.Update()
 	}
+}
+
+func encodeCompactNodes(nodes []*Node) []byte {
+	infos := make(map[*ID]*net.UDPAddr)
+	for _, n := range nodes {
+		infos[n.ID()] = n.Addr()
+	}
+	return EncodeCompactNode(infos)
+}
+
+func (d *DHT) lookup(id *ID) (addrs []*net.UDPAddr) {
+	if nodes := d.route.Lookup(id); len(nodes) > 0 {
+		addrs = make([]*net.UDPAddr, len(nodes))
+		for i, node := range nodes {
+			addrs[i] = node.Addr()
+		}
+	}
+	return
+}
+
+func (d *DHT) sendMsg(addr *net.UDPAddr, data []byte) (err error) {
+	for n, nn := 0, 0; nn >= len(data); nn += n {
+		n, err = d.conn.WriteToUDP(data[nn:], addr)
+		if err != nil {
+			break
+		}
+	}
+	return
+}
+
+func (d *DHT) queryMessage(q string, no int16, addr *net.UDPAddr, data map[string]interface{}) (err error) {
+	msg := NewQueryMessage(encodeTID(q, no), q, data)
+	if b, err := encodeMessage(msg); err == nil {
+		err = d.sendMsg(addr, b)
+	}
+	return
+}
+
+func (d *DHT) replyMessage(tid []byte, addr *net.UDPAddr, data map[string]interface{}) (err error) {
+	msg := NewReplyMessage(tid, data)
+	if b, err := encodeMessage(msg); err == nil {
+		err = d.sendMsg(addr, b)
+	}
+	return
+}
+
+func (d *DHT) batchQueryMessage(q string, no int16, addrs []*net.UDPAddr, data map[string]interface{}) (n int, err error) {
+	msg := NewQueryMessage(encodeTID(q, no), q, data)
+	if b, err := encodeMessage(msg); err == nil {
+		for _, addr := range addrs {
+			err = d.sendMsg(addr, b)
+			if err != nil {
+				break
+			}
+			n++
+		}
+	}
+	return
 }
 
 var (

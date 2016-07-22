@@ -126,7 +126,7 @@ func (t *Table) Lookup(id *ID) []*Node {
 	}
 
 	ln := newLookupNodes(id)
-	if ln.CopyFrom(e); ln.Len() < 8 {
+	if ln.CopyFrom(e); ln.Len() < maxNodeCount {
 		prev, next := e.Prev(), e.Next()
 		for ln.Len() < 8 && (prev != nil || next != nil) {
 			if prev != nil {
@@ -141,8 +141,8 @@ func (t *Table) Lookup(id *ID) []*Node {
 	}
 	sort.Sort(ln)
 
-	if ln.Len() > 8 {
-		return ln.nodes[:8]
+	if ln.Len() > maxNodeCount {
+		return ln.nodes[:maxNodeCount]
 	}
 	return ln.nodes
 }
@@ -167,7 +167,7 @@ type lookupNodes struct {
 func newLookupNodes(id *ID) *lookupNodes {
 	return &lookupNodes{
 		id:    id,
-		nodes: make([]*Node, 0, 8),
+		nodes: make([]*Node, 0, maxNodeCount),
 	}
 }
 
