@@ -140,16 +140,13 @@ func (d *DHT) unInitialize() {
 }
 
 func (d *DHT) cleanup() {
-	var count int
 	d.route.Map(func(b *Bucket) bool {
-		if node := b.Random(); node != nil {
-			d.findNode(node.ID())
-		}
-		count += b.Count()
 		if b.IsGood() {
 			d.cleanupBucket(b)
 		} else {
-			//d.findNode(b.RandomID())
+			if node := b.Random(); node != nil {
+				d.findNode(node.ID())
+			}
 		}
 		return true
 	})
@@ -222,10 +219,6 @@ func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse
 
 	q, no := decodeTID(tid)
 
-	if /*q == "get_peers" || */ q == "announce_peer" {
-		fmt.Println("[reply]", q, no, id, addr)
-	}
-
 	switch q {
 	case "ping":
 	case "find_node":
@@ -233,7 +226,7 @@ func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse
 	case "get_peers":
 		d.handleGetPeers(res.Values(), res.Nodes())
 	case "announce_peer":
-		_ = id
+		_ = no
 	default:
 		//fmt.Println(string(tid), len(tid))
 	}
@@ -459,7 +452,7 @@ func (d *DHT) lookup(id *ID) (addrs []*net.UDPAddr) {
 }
 
 func (d *DHT) sendMsg(addr *net.UDPAddr, data []byte) (err error) {
-	for n, nn := 0, 0; nn >= len(data); nn += n {
+	for n, nn := 0, 0; nn < len(data); nn += n {
 		n, err = d.conn.WriteToUDP(data[nn:], addr)
 		if err != nil {
 			break
