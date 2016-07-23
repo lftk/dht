@@ -11,7 +11,7 @@ type Node struct {
 	id     *ID
 	addr   *net.UDPAddr
 	time   time.Time
-	pinged int8
+	pinged int
 }
 
 // NewNode returns a node
@@ -33,14 +33,15 @@ func (n *Node) Addr() *net.UDPAddr {
 	return n.addr
 }
 
-// IsGood returns false if (now - n.time) > 15s
-func (n *Node) IsGood() bool {
-	return time.Since(n.time).Minutes() <= 15
+// Time returns time
+func (n *Node) Time() time.Time {
+	return n.time
 }
 
 // Update node lasttime
 func (n *Node) Update() {
 	n.time = time.Now()
+	n.pinged = 0
 }
 
 func (n *Node) String() string {

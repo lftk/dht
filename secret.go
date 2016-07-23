@@ -28,28 +28,28 @@ func (s *Secret) Update() {
 	s.rand.Read(s.cur)
 }
 
-func (s *Secret) Create(addr string) []byte {
-	return s.create(addr, false)
+func (s *Secret) Create(b []byte) []byte {
+	return s.create(b, false)
 }
 
-func (s *Secret) create(addr string, old bool) []byte {
+func (s *Secret) create(b []byte, old bool) []byte {
 	sec := s.cur
 	if old {
 		sec = s.old
 	}
 	h := sha1.New()
 	h.Write(sec)
-	h.Write([]byte(addr))
+	h.Write(b)
 	return h.Sum(nil)
 }
 
-func (s *Secret) Match(addr string, token []byte) bool {
+func (s *Secret) Match(b, token []byte) bool {
 	t := string(token)
-	t1 := s.create(addr, false)
+	t1 := s.create(b, false)
 	if string(t1) == t {
 		return true
 	}
-	t2 := s.create(addr, true)
+	t2 := s.create(b, true)
 	if string(t2) == t {
 		return true
 	}

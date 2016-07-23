@@ -2,25 +2,24 @@ package dht
 
 import (
 	"container/list"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
 	"time"
 )
 
-const maxNodeCount int = 64
-
 // Bucket type
 type Bucket struct {
+	cap   int
 	first *ID
 	time  time.Time
 	nodes *list.List
 }
 
 // NewBucket return a bucket
-func NewBucket(first *ID) *Bucket {
+func NewBucket(first *ID, cap int) *Bucket {
 	return &Bucket{
+		cap:   cap,
 		first: first,
 		time:  time.Now(),
 		nodes: list.New(),
@@ -32,26 +31,12 @@ func (b *Bucket) Count() int {
 	return b.nodes.Len()
 }
 
-// Append a node, move to back if exist node
-func (b *Bucket) Append(n *Node) error {
-	var updated bool
-	b.handle(func(e *list.Element) bool {
-		if e.Value.(*Node).id.Compare(n.id) == 0 {
-			updated = true
-			b.nodes.MoveToBack(e)
-			return false
-		}
-		return true
-	})
-	if updated == false {
-		if b.Count() == maxNodeCount {
-			return errors.New("bucket is full")
-		}
-		b.nodes.PushBack(n)
-	}
-	return nil
+// Capacity returns bucket cap
+func (b *Bucket) Capacity() int {
+	return b.cap
 }
 
+// Insert a node, move to back if exist node
 func (b *Bucket) Insert(id *ID, addr *net.UDPAddr) (n *Node) {
 	b.handle(func(e *list.Element) bool {
 		if e.Value.(*Node).id.Compare(id) == 0 {
@@ -61,7 +46,7 @@ func (b *Bucket) Insert(id *ID, addr *net.UDPAddr) (n *Node) {
 		}
 		return true
 	})
-	if n == nil && b.Count() != maxNodeCount {
+	if n == nil && b.Count() != b.cap {
 		n = NewNode(id, addr)
 		b.nodes.PushBack(n)
 	}
@@ -109,19 +94,16 @@ func (b *Bucket) Random() *Node {
 	return node
 }
 
-func (b *Bucket) RandomID() (id *ID) {
-	id = NewRandomID()
-	for i := 0; i < b.first.LowBit(); i++ {
-		k, _ := b.first.GetBit(i)
-		id.SetBit(i, k)
-	}
-	return
-}
-
 func (b *Bucket) IsGood() bool {
 	return time.Since(b.time).Minutes() <= 15.0
 }
 
+// Time returns time
+func (b *Bucket) Time() time.Time {
+	return b.time
+}
+
+// Update time
 func (b *Bucket) Update() {
 	b.time = time.Now()
 }
@@ -138,6 +120,17 @@ func (b *Bucket) handle(f func(e *list.Element) bool) {
 		if f(e) == false {
 			return
 		}
+	}
+}
+
+func (b *Bucket) clean(f func(n *Node) bool) {
+	e := b.nodes.Front()
+	for e != nil {
+		next := e.Next()
+		if f(e.Value.(*Node)) {
+			b.nodes.Remove(e)
+		}
+		e = next
 	}
 }
 

@@ -11,38 +11,23 @@ import (
 // Table store all nodes
 type Table struct {
 	id      *ID
+	ksize   int
 	buckets *list.List
 }
 
 // NewTable returns a table
-func NewTable(id *ID) *Table {
+func NewTable(id *ID, ksize int) *Table {
 	t := &Table{
 		id:      id,
+		ksize:   ksize,
 		buckets: list.New(),
 	}
-	t.buckets.PushBack(NewBucket(ZeroID))
+	b := NewBucket(ZeroID, ksize)
+	t.buckets.PushBack(b)
 	return t
 }
 
-// Append a node
-func (t *Table) Append(n *Node) error {
-	if n.id.Compare(t.id) == 0 {
-		return fmt.Errorf("node's id equal to table's id")
-	}
-	e := t.find(n.id)
-	if e == nil {
-		return fmt.Errorf("not found bucket of %v", n.id)
-	}
-	b := e.Value.(*Bucket)
-	if err := b.Append(n); err == nil {
-		return nil
-	}
-	if t.selfInBucket(e) && t.splitBucket(e) {
-		return t.Append(n)
-	}
-	return errors.New("drop this node")
-}
-
+// Insert a node
 func (t *Table) Insert(id *ID, addr *net.UDPAddr) (*Node, error) {
 	if id.Compare(t.id) == 0 {
 		return nil, errors.New("id equal to table's id")
@@ -55,7 +40,7 @@ func (t *Table) insert(id *ID, addr *net.UDPAddr) (n *Node, err error) {
 		if n = e.Value.(*Bucket).Insert(id, addr); n != nil {
 			return
 		}
-		if t.selfInBucket(e) && t.splitBucket(e) {
+		if inBucket(t.id, e) && t.split(e) {
 			return t.insert(id, addr)
 		}
 	}
@@ -63,14 +48,10 @@ func (t *Table) insert(id *ID, addr *net.UDPAddr) (n *Node, err error) {
 	return
 }
 
-func (t *Table) selfInBucket(e *list.Element) bool {
-	return inBucket(t.id, e)
-}
-
-func (t *Table) splitBucket(e *list.Element) bool {
+func (t *Table) split(e *list.Element) bool {
 	bit := e.Value.(*Bucket).first.LowBit()
-	if e.Next() != nil {
-		bit2 := e.Next().Value.(*Bucket).first.LowBit()
+	if next := e.Next(); next != nil {
+		bit2 := next.Value.(*Bucket).first.LowBit()
 		if bit < bit2 {
 			bit = bit2
 		}
@@ -82,7 +63,7 @@ func (t *Table) splitBucket(e *list.Element) bool {
 	b := e.Value.(*Bucket)
 	first, _ := NewID(b.first.Bytes())
 	first.SetBit(bit, true)
-	b2 := NewBucket(first)
+	b2 := NewBucket(first, b.cap)
 	t.buckets.InsertAfter(b2, e)
 
 	var eles []*list.Element
@@ -125,10 +106,10 @@ func (t *Table) Lookup(id *ID) []*Node {
 		return nil
 	}
 
-	ln := newLookupNodes(id)
-	if ln.CopyFrom(e); ln.Len() < maxNodeCount {
+	ln := newLookupNodes(id, t.ksize)
+	if ln.CopyFrom(e); ln.Len() < t.ksize {
 		prev, next := e.Prev(), e.Next()
-		for ln.Len() < 8 && (prev != nil || next != nil) {
+		for ln.Len() < t.ksize && (prev != nil || next != nil) {
 			if prev != nil {
 				ln.CopyFrom(prev)
 				prev = prev.Prev()
@@ -141,8 +122,8 @@ func (t *Table) Lookup(id *ID) []*Node {
 	}
 	sort.Sort(ln)
 
-	if ln.Len() > maxNodeCount {
-		return ln.nodes[:maxNodeCount]
+	if ln.Len() > t.ksize {
+		return ln.nodes[:t.ksize]
 	}
 	return ln.nodes
 }
@@ -164,10 +145,10 @@ type lookupNodes struct {
 	nodes []*Node
 }
 
-func newLookupNodes(id *ID) *lookupNodes {
+func newLookupNodes(id *ID, cap int) *lookupNodes {
 	return &lookupNodes{
 		id:    id,
-		nodes: make([]*Node, 0, maxNodeCount),
+		nodes: make([]*Node, 0, cap),
 	}
 }
 
@@ -183,7 +164,7 @@ func (ln *lookupNodes) Len() int {
 }
 
 func (ln *lookupNodes) Less(i, j int) bool {
-	for k := 0; k < 5; k++ {
+	for k := 0; k < 20; k++ {
 		n1 := ln.nodes[i].id[k] ^ ln.id[k]
 		n2 := ln.nodes[j].id[k] ^ ln.id[k]
 		if n1 < n2 {
