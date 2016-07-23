@@ -11,44 +11,19 @@ import (
 	"github.com/4396/dht"
 )
 
-type DHTHandler struct {
-	d *dht.DHT
+type DHTListener struct {
 }
 
-func NewDHTHandler(d *dht.DHT) dht.Handler {
-	return &DHTHandler{
-		d: d,
-	}
+func newDHTListener() dht.Listener {
+	return &DHTListener{}
 }
 
-func (l *DHTHandler) Initialize() {
-	//	fmt.Println(l.d.ID())
-	//	fmt.Println(l.d.Addr())
-}
-
-func (l *DHTHandler) UnInitialize() {
-	fmt.Println("--exit--")
-
-	l.d.Route().Map(func(b *dht.Bucket) bool {
-		b.Map(func(n *dht.Node) bool {
-			return true
-		})
-		return true
-	})
-}
-
-func (l *DHTHandler) Cleanup() {
-	if n := dhtNodeNums(l.d); n < 1024 {
-		l.d.FindNode(l.d.ID())
-	}
-}
-
-var tid2 int
+var tid2 int64
 var tors2 string
 
-func (l *DHTHandler) GetPeers(tor *dht.ID) {
+func (l *DHTListener) GetPeers(id *dht.ID, tor *dht.ID) {
+	tid2++
 	/*
-		tid2++
 		s := fmt.Sprintln("gp", tid2, tor)
 		fmt.Print(s)
 		tors2 = s + tors2
@@ -58,21 +33,15 @@ func (l *DHTHandler) GetPeers(tor *dht.ID) {
 var tid int64
 var tors string
 
-func (l *DHTHandler) AnnouncePeer(tor *dht.ID, peer *dht.Peer) {
+func (l *DHTListener) AnnouncePeer(id *dht.ID, tor *dht.ID, peer *dht.Peer) {
 	tid++
 	s := fmt.Sprintln("ap", tid, tor)
-	fmt.Print(s)
+	//fmt.Print(s)
 	if tid%1000 == 0 {
 		tors = ""
 	}
 	tors = s + tors
 }
-
-/*
-func (l *DHTHandler) HandleError(e *dht.KadError) {
-	fmt.Println("err:", e.Value(), e.String())
-}
-*/
 
 func newDHTServer() (d *dht.DHT, err error) {
 	id := dht.NewRandomID()
@@ -80,9 +49,8 @@ func newDHTServer() (d *dht.DHT, err error) {
 	if err != nil {
 		return
 	}
-	handler := NewDHTHandler(nil)
-	d = dht.NewDHT2(id, conn.(*net.UDPConn), handler)
-	handler.(*DHTHandler).d = d
+	handler := newDHTListener()
+	d = dht.NewDHT(id, conn.(*net.UDPConn), 16, handler)
 	return
 }
 
@@ -124,10 +92,10 @@ type udpMessage struct {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	msg := make(chan *udpMessage, 10240)
+	msg := make(chan *udpMessage, 1024)
 	var dhts []*dht.DHT
 	var w sync.WaitGroup
-	for i := 0; i < /*runtime.NumCPU()*/ 1000; i++ {
+	for i := 0; i < 1000; i++ {
 		d, err := newDHTServer()
 		if err != nil {
 			continue
@@ -137,14 +105,16 @@ func main() {
 		go func(d *dht.DHT, idx int, msg chan *udpMessage) {
 			defer w.Done()
 			conn := d.Conn()
+			buf := make([]byte, 1024)
 			for {
-				buf := make([]byte, 1024)
+				//buf := make([]byte, 1024)
 				n, addr, err := conn.ReadFromUDP(buf)
 				if err != nil {
 					fmt.Println(err)
 					continue
 				}
-				msg <- &udpMessage{idx, addr, buf[:n]}
+				d.HandleMessage(addr, buf[:n])
+				//msg <- &udpMessage{idx, addr, buf[:n]}
 			}
 		}(d, i, msg)
 		if err = initDHTServer(d); err != nil {
@@ -153,7 +123,10 @@ func main() {
 	}
 
 	go func() {
-		cleanup := time.Tick(time.Second * 30)
+		checkup := time.Tick(time.Second * 30)
+		cleanup := time.Tick(time.Minute * 15)
+		serect := time.Tick(time.Minute * 15)
+
 		for {
 			select {
 			case m := <-msg:
@@ -161,9 +134,19 @@ func main() {
 				if m.addr != nil && m.data != nil {
 					d.HandleMessage(m.addr, m.data)
 				}
+			case <-checkup:
+				for _, d := range dhts {
+					if d.NumNodes() < 1024 {
+						d.FindNode(d.ID())
+					}
+				}
 			case <-cleanup:
 				for _, d := range dhts {
-					d.Cleanup()
+					d.CleanNodes(time.Minute * 15)
+				}
+			case <-serect:
+				for _, d := range dhts {
+					d.UpdateSecret()
 				}
 			default:
 			}
@@ -173,9 +156,9 @@ func main() {
 	go http.HandleFunc("/dht", func(res http.ResponseWriter, req *http.Request) {
 		var count int
 		for _, d := range dhts {
-			//s := fmt.Sprintf("%02d %s %04d\n", i, d.ID(), dhtNodeNums(d))
-			//res.Write([]byte(s))
-			count += dhtNodeNums(d)
+			n := dhtNodeNums(d)
+			fmt.Print(n, " ")
+			count += n
 		}
 		fmt.Println("//", count, tid, tid2)
 
@@ -188,7 +171,7 @@ func main() {
 			res.Write([]byte(tors2))
 		*/
 	})
-	go http.ListenAndServe(":6882", nil)
+	http.ListenAndServe(":6882", nil)
 
 	w.Wait()
 }
