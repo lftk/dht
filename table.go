@@ -32,6 +32,15 @@ func (t *Table) KSize() int {
 	return t.ksize
 }
 
+// NumNodes returns all node count
+func (t *Table) NumNodes() (n int) {
+	t.Map(func(b *Bucket) bool {
+		n += b.Count()
+		return true
+	})
+	return
+}
+
 // Insert a node
 func (t *Table) Insert(id *ID, addr *net.UDPAddr) (*Node, error) {
 	if id.Compare(t.id) == 0 {

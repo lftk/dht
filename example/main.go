@@ -176,14 +176,14 @@ func main() {
 				}
 			case <-timer:
 				for _, s := range svrs {
-					if n := s.d.NumNodes(); n < 1024 {
+					if n := s.d.Route().NumNodes(); n < 1024 {
 						s.d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6)
 					}
 				}
 			case <-checkup:
 				var numNodes2 int
 				for _, s := range svrs {
-					if n := s.d.NumNodes(); n < 1024 {
+					if n := s.d.Route().NumNodes(); n < 1024 {
 						s.d.FindNode(s.d.ID())
 						numNodes2 += n
 					}

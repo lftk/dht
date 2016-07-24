@@ -50,15 +50,6 @@ func (d *DHT) Route() *Table {
 	return d.route
 }
 
-// NumNodes returns all node count
-func (d *DHT) NumNodes() (n int) {
-	d.route.Map(func(b *Bucket) bool {
-		n += b.Count()
-		return true
-	})
-	return
-}
-
 func (d *DHT) cleanNodes(tm time.Duration) {
 	d.route.Map(func(b *Bucket) bool {
 		if time.Since(b.time) > tm {
