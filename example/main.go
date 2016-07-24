@@ -11,63 +11,76 @@ import (
 	"github.com/4396/dht"
 )
 
-type DHTListener struct {
+type dhtQueryTracker struct {
+	d *dht.DHT
 }
 
-func newDHTListener() dht.Listener {
-	return &DHTListener{}
+func (t *dhtQueryTracker) Ping(id *dht.ID) {
+}
+
+func (t *dhtQueryTracker) FindNode(id *dht.ID, target *dht.ID) {
 }
 
 var tid2 int64
 var tors2 string
 
-func (l *DHTListener) GetPeers(id *dht.ID, tor *dht.ID, peers []string) {
+func (t *dhtQueryTracker) GetPeers(id *dht.ID, tor *dht.ID) {
 	tid2++
-	/*
-		s := fmt.Sprintln("gp", tid2, tor)
-		fmt.Print(s)
-		tors2 = s + tors2
-	*/
 }
 
 var tid int64
 var tors string
 
-func (l *DHTListener) AnnouncePeer(id *dht.ID, tor *dht.ID, peer string) {
-	tid++
-	s := fmt.Sprintln("ap", tid, tor)
-	//fmt.Print(s)
-	if tid%1000 == 0 {
+func (t *dhtQueryTracker) AnnouncePeer(id *dht.ID, tor *dht.ID, peer string) {
+	if tid++; tid%1000 == 0 {
 		tors = ""
 	}
+	s := fmt.Sprintln("ap", tid, tor)
 	tors = s + tors
 }
 
-func (l *DHTListener) OnRequest(meth dht.KadMethod, req *dht.KadRequest) {
-	if meth == dht.AnnouncePeer {
-		if tid++; tid%1000 == 0 {
-			tors = ""
-		}
-		tor, _ := dht.NewID(req.InfoHash())
-		s := fmt.Sprintln("ap", tid, tor)
-		tors = s + tors
-	}
+type dhtReplyTracker struct {
+	d *dht.DHT
 }
 
-func (l *DHTListener) OnResponse(meth dht.KadMethod, res *dht.KadResponse) {
-	if meth == dht.GetPeers {
-		tid2++
-	}
+func (t *dhtReplyTracker) Ping(id *dht.ID) {
 }
 
-func newDHTServer() (d *dht.DHT, err error) {
+func (t *dhtReplyTracker) FindNode(id *dht.ID, nodes []byte) {
+}
+
+func (t *dhtReplyTracker) GetPeers(id *dht.ID, peers []string, nodes []byte) {
+}
+
+func (t *dhtReplyTracker) AnnouncePeer(id *dht.ID) {
+}
+
+type dhtErrorTracker struct {
+	d *dht.DHT
+}
+
+func (t *dhtErrorTracker) Error(code int, msg string) {
+	fmt.Println(code, msg)
+}
+
+type dhtServer struct {
+	d *dht.DHT
+	t *dht.Tracker
+}
+
+func newDHTServer() (s *dhtServer, err error) {
 	id := dht.NewRandomID()
 	conn, err := net.ListenPacket("udp", ":0")
 	if err != nil {
 		return
 	}
-	handler := newDHTListener()
-	d = dht.NewDHT(id, conn.(*net.UDPConn), 16, handler)
+	d := dht.NewDHT(id, conn.(*net.UDPConn), 16)
+	t := dht.NewTracker(
+		&dhtQueryTracker{d},
+		&dhtReplyTracker{d},
+		&dhtErrorTracker{d},
+	)
+	s = &dhtServer{d, t}
 	return
 }
 
@@ -116,33 +129,33 @@ func main() {
 		return make([]byte, 1024)
 	}}
 
-	var dhts []*dht.DHT
+	var svrs []*dhtServer
 	var w sync.WaitGroup
 	for i := 0; i < 1000; i++ {
-		d, err := newDHTServer()
+		s, err := newDHTServer()
 		if err != nil {
 			continue
 		}
-		dhts = append(dhts, d)
+		svrs = append(svrs, s)
 		w.Add(1)
 		go func(d *dht.DHT, idx int, msg chan *udpMessage) {
 			defer w.Done()
+
+			if err = initDHTServer(d); err != nil {
+				fmt.Println(err)
+			}
+
 			conn := d.Conn()
 			buf := datas.Get().([]byte)
 			for {
-				//buf := make([]byte, 1024)
 				n, addr, err := conn.ReadFromUDP(buf)
 				if err != nil {
 					fmt.Println(err)
 					continue
 				}
-				//d.HandleMessage(addr, buf[:n])
 				msg <- &udpMessage{idx, addr, buf, n}
 			}
-		}(d, i, msg)
-		if err = initDHTServer(d); err != nil {
-			fmt.Println(err)
-		}
+		}(s.d, i, msg)
 	}
 
 	var numNodes int
@@ -154,22 +167,22 @@ func main() {
 		for {
 			select {
 			case m := <-msg:
-				d := dhts[m.idx]
+				s := svrs[m.idx]
 				if m.addr != nil && m.data != nil {
-					d.HandleMessage(m.addr, m.data[:m.size])
+					s.d.HandleMessage(m.addr, m.data[:m.size], s.t)
 					datas.Put(m.data)
 				}
 			case <-timer:
-				for _, d := range dhts {
-					if n := d.NumNodes(); n < 1024 {
-						d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6)
+				for _, s := range svrs {
+					if n := s.d.NumNodes(); n < 1024 {
+						s.d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6)
 					}
 				}
 			case <-checkup:
 				var numNodes2 int
-				for _, d := range dhts {
-					if n := d.NumNodes(); n < 1024 {
-						d.FindNode(d.ID())
+				for _, s := range svrs {
+					if n := s.d.NumNodes(); n < 1024 {
+						s.d.FindNode(s.d.ID())
 						numNodes2 += n
 					}
 				}
@@ -183,13 +196,8 @@ func main() {
 	startupTime := time.Now()
 	go http.HandleFunc("/dht", func(res http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(res, "===", startupTime, numNodes, tid, tid2)
-		//fmt.Fprintln(res, dhts[0].Route())
 		fmt.Fprintln(res, "---------------------------------------------------")
 		res.Write([]byte(tors))
-		/*
-			fmt.Fprintln(res, "---------------------------------------------------")
-			res.Write([]byte(tors2))
-		*/
 	})
 	http.ListenAndServe(":6882", nil)
 
