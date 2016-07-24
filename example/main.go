@@ -87,12 +87,18 @@ type udpMessage struct {
 	idx  int
 	addr *net.UDPAddr
 	data []byte
+	size int
 }
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	msg := make(chan *udpMessage, 1024)
+
+	datas := &sync.Pool{New: func() interface{} {
+		return make([]byte, 1024)
+	}}
+
 	var dhts []*dht.DHT
 	var w sync.WaitGroup
 	for i := 0; i < 1000; i++ {
@@ -105,7 +111,7 @@ func main() {
 		go func(d *dht.DHT, idx int, msg chan *udpMessage) {
 			defer w.Done()
 			conn := d.Conn()
-			buf := make([]byte, 1024)
+			buf := datas.Get().([]byte)
 			for {
 				//buf := make([]byte, 1024)
 				n, addr, err := conn.ReadFromUDP(buf)
@@ -113,14 +119,16 @@ func main() {
 					fmt.Println(err)
 					continue
 				}
-				d.HandleMessage(addr, buf[:n])
-				//msg <- &udpMessage{idx, addr, buf[:n]}
+				//d.HandleMessage(addr, buf[:n])
+				msg <- &udpMessage{idx, addr, buf, n}
 			}
 		}(d, i, msg)
 		if err = initDHTServer(d); err != nil {
 			fmt.Println(err)
 		}
 	}
+
+	var numNodes int
 
 	go func() {
 		checkup := time.Tick(time.Second * 30)
@@ -132,14 +140,19 @@ func main() {
 			case m := <-msg:
 				d := dhts[m.idx]
 				if m.addr != nil && m.data != nil {
-					d.HandleMessage(m.addr, m.data)
+					d.HandleMessage(m.addr, m.data[:m.size])
+					datas.Put(m.data)
 				}
 			case <-checkup:
+				var numNodes2 int
 				for _, d := range dhts {
-					if d.NumNodes() < 1024 {
+					if n := d.NumNodes(); n < 1024 {
 						d.FindNode(d.ID())
+						numNodes2 += n
 					}
 				}
+				numNodes = numNodes2
+				fmt.Println(numNodes, tid, tid2)
 			case <-cleanup:
 				for _, d := range dhts {
 					d.CleanNodes(time.Minute * 15)
@@ -153,16 +166,9 @@ func main() {
 		}
 	}()
 
+	startupTime := time.Now()
 	go http.HandleFunc("/dht", func(res http.ResponseWriter, req *http.Request) {
-		var count int
-		for _, d := range dhts {
-			n := dhtNodeNums(d)
-			fmt.Print(n, " ")
-			count += n
-		}
-		fmt.Println("//", count, tid, tid2)
-
-		fmt.Fprintln(res, "===", count)
+		fmt.Fprintln(res, "===", startupTime, numNodes, tid, tid2)
 		//fmt.Fprintln(res, dhts[0].Route())
 		fmt.Fprintln(res, "---------------------------------------------------")
 		res.Write([]byte(tors))
