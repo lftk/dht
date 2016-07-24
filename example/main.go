@@ -21,7 +21,7 @@ func newDHTListener() dht.Listener {
 var tid2 int64
 var tors2 string
 
-func (l *DHTListener) GetPeers(id *dht.ID, tor *dht.ID) {
+func (l *DHTListener) GetPeers(id *dht.ID, tor *dht.ID, peers []string) {
 	tid2++
 	/*
 		s := fmt.Sprintln("gp", tid2, tor)
@@ -33,7 +33,7 @@ func (l *DHTListener) GetPeers(id *dht.ID, tor *dht.ID) {
 var tid int64
 var tors string
 
-func (l *DHTListener) AnnouncePeer(id *dht.ID, tor *dht.ID, peer *dht.Peer) {
+func (l *DHTListener) AnnouncePeer(id *dht.ID, tor *dht.ID, peer string) {
 	tid++
 	s := fmt.Sprintln("ap", tid, tor)
 	//fmt.Print(s)
@@ -41,6 +41,23 @@ func (l *DHTListener) AnnouncePeer(id *dht.ID, tor *dht.ID, peer *dht.Peer) {
 		tors = ""
 	}
 	tors = s + tors
+}
+
+func (l *DHTListener) OnRequest(meth dht.KadMethod, req *dht.KadRequest) {
+	if meth == dht.AnnouncePeer {
+		if tid++; tid%1000 == 0 {
+			tors = ""
+		}
+		tor, _ := dht.NewID(req.InfoHash())
+		s := fmt.Sprintln("ap", tid, tor)
+		tors = s + tors
+	}
+}
+
+func (l *DHTListener) OnResponse(meth dht.KadMethod, res *dht.KadResponse) {
+	if meth == dht.GetPeers {
+		tid2++
+	}
 }
 
 func newDHTServer() (d *dht.DHT, err error) {
@@ -131,9 +148,8 @@ func main() {
 	var numNodes int
 
 	go func() {
+		timer := time.Tick(time.Second * 30)
 		checkup := time.Tick(time.Second * 30)
-		cleanup := time.Tick(time.Minute * 15)
-		serect := time.Tick(time.Minute * 15)
 
 		for {
 			select {
@@ -142,6 +158,12 @@ func main() {
 				if m.addr != nil && m.data != nil {
 					d.HandleMessage(m.addr, m.data[:m.size])
 					datas.Put(m.data)
+				}
+			case <-timer:
+				for _, d := range dhts {
+					if n := d.NumNodes(); n < 1024 {
+						d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6)
+					}
 				}
 			case <-checkup:
 				var numNodes2 int
@@ -153,14 +175,6 @@ func main() {
 				}
 				numNodes = numNodes2
 				fmt.Println(numNodes, tid, tid2)
-			case <-cleanup:
-				for _, d := range dhts {
-					d.CleanNodes(time.Minute * 15)
-				}
-			case <-serect:
-				for _, d := range dhts {
-					d.UpdateSecret()
-				}
 			default:
 			}
 		}
