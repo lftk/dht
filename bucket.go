@@ -54,9 +54,9 @@ func (b *Bucket) Insert(id *ID, addr *net.UDPAddr) (n *Node) {
 }
 
 // Remove a node, return true if exist node
-func (b *Bucket) Remove(n *Node) bool {
+func (b *Bucket) Remove(id *ID) bool {
 	for e := b.nodes.Front(); e != nil; e = e.Next() {
-		if e.Value == n {
+		if e.Value.(*Node).id.Compare(id) == 0 {
 			b.nodes.Remove(e)
 			return true
 		}
@@ -65,16 +65,15 @@ func (b *Bucket) Remove(n *Node) bool {
 }
 
 // Find returns node
-func (b *Bucket) Find(id *ID) *Node {
-	var ptr *Node
+func (b *Bucket) Find(id *ID) (node *Node) {
 	b.Map(func(n *Node) bool {
 		if n.id.Compare(id) == 0 {
-			ptr = n
+			node = n
 			return false
 		}
 		return true
 	})
-	return ptr
+	return
 }
 
 // Random returns a random node
@@ -92,10 +91,6 @@ func (b *Bucket) Random() *Node {
 		return true
 	})
 	return node
-}
-
-func (b *Bucket) IsGood() bool {
-	return time.Since(b.time).Minutes() <= 15.0
 }
 
 // Time returns time
