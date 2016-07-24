@@ -103,12 +103,12 @@ func (d *DHT) HandleMessage(addr *net.UDPAddr, data []byte, t *Tracker) (err err
 		return
 	}
 	switch msg.Y {
-	case "e":
-		err = d.handleErrorMessage(msg.E, t.e)
 	case "q":
 		err = d.handleQueryMessage(addr, msg.T, msg.Q, &msg.A, t.q)
 	case "r":
 		err = d.handleReplyMessage(addr, msg.T, &msg.R, t.r)
+	case "e":
+		err = d.handleErrorMessage(msg.E, t.e)
 	}
 	return
 }

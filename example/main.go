@@ -37,6 +37,8 @@ func (t *dhtQueryTracker) AnnouncePeer(id *dht.ID, tor *dht.ID, peer string) {
 	}
 	s := fmt.Sprintln("ap", tid, tor)
 	tors = s + tors
+
+	fmt.Println(peer)
 }
 
 type dhtReplyTracker struct {
@@ -60,7 +62,7 @@ type dhtErrorTracker struct {
 }
 
 func (t *dhtErrorTracker) Error(code int, msg string) {
-	fmt.Println(code, msg)
+	//fmt.Println(code, msg)
 }
 
 type dhtServer struct {
