@@ -1,6 +1,8 @@
 package dht
 
 import (
+	"errors"
+	"fmt"
 	"math"
 	"net"
 	"time"
@@ -11,8 +13,9 @@ type DHT struct {
 	conn     *net.UDPConn
 	route    *Table
 	secret   *Secret
-	storage  Storage
+	storages *storages
 	listener Listener
+	tsecret  time.Time
 }
 
 // NewDHT returns DHT
@@ -21,6 +24,7 @@ func NewDHT(id *ID, conn *net.UDPConn, ksize int, listener Listener) *DHT {
 		conn:     conn,
 		route:    NewTable(id, ksize),
 		secret:   NewSecret(),
+		storages: newStorages(),
 		listener: listener,
 	}
 }
@@ -67,6 +71,14 @@ func (d *DHT) UpdateSecret() {
 	d.secret.Update()
 }
 
+func (d *DHT) cleanNodes(tm time.Duration) {
+	d.CleanNodes(tm)
+}
+
+func (d *DHT) cleanPeers(tm time.Duration) {
+
+}
+
 // CleanNodes clean timeout nodes
 func (d *DHT) CleanNodes(tm time.Duration) {
 	d.route.Map(func(b *Bucket) bool {
@@ -76,7 +88,7 @@ func (d *DHT) CleanNodes(tm time.Duration) {
 			}
 		} else {
 			b.clean(func(n *Node) bool {
-				if n.pinged > 1 {
+				if n.pinged > 0 {
 					return true
 				}
 				if time.Since(n.time) > tm {
@@ -88,6 +100,16 @@ func (d *DHT) CleanNodes(tm time.Duration) {
 		}
 		return true
 	})
+}
+
+// DoTimer update secret, clean nodes and peers
+func (d *DHT) DoTimer(secret, node, peer time.Duration) {
+	if time.Since(d.tsecret) >= secret {
+		d.tsecret = time.Now()
+		d.secret.Update()
+	}
+	d.cleanNodes(node)
+	d.cleanPeers(peer)
 }
 
 // HandleMessage handle udp packet
@@ -126,9 +148,13 @@ func (d *DHT) handleQueryMessage(tid []byte, addr *net.UDPAddr, req *KadRequest)
 	case "find_node":
 		d.replyFindNode(tid, addr, req.Target())
 	case "get_peers":
-		d.replyGetPeers(tid, addr, req.InfoHash())
+		tor, _ := NewID(req.InfoHash())
+		d.replyGetPeers(tid, addr, tor)
 	case "announce_peer":
 		d.replyAnnouncePeer(tid, addr, req)
+		if d.listener != nil {
+			d.listener.OnRequest(AnnouncePeer, req)
+		}
 	}
 }
 
@@ -146,11 +172,12 @@ func (d *DHT) handleReplyMessage(tid []byte, addr *net.UDPAddr, res *KadResponse
 	case "find_node":
 		d.handleFindNode(res.Nodes())
 	case "get_peers":
-		d.handleGetPeers(res.Values(), res.Nodes())
+		d.handleGetPeers(nil, res.Values(), res.Nodes())
+		if d.listener != nil {
+			d.listener.OnResponse(GetPeers, res)
+		}
 	case "announce_peer":
 		_ = no
-	default:
-		//fmt.Println(string(tid), len(tid))
 	}
 }
 
@@ -163,14 +190,8 @@ func (d *DHT) handleFindNode(nodes []byte) {
 	}
 }
 
-func (d *DHT) handleGetPeers(values []string, nodes []byte) {
+func (d *DHT) handleGetPeers(tor *ID, values []string, nodes []byte) {
 	if len(values) > 0 {
-		for _, v := range DecodeCompactPeer(values) {
-			addr, _ := net.ResolveTCPAddr("tcp", v)
-			peer := NewPeer(addr)
-			_ = peer
-			// insert peer node
-		}
 	} else if len(nodes) > 0 {
 		for id, addr := range DecodeCompactNode(nodes) {
 			d.insertOrUpdate(id, addr)
@@ -227,7 +248,8 @@ func (d *DHT) findNode(id *ID) {
 	d.findNode(id)
 }
 
-func (d *DHT) getPeers(id *ID) {
+// GetPeers search info hash
+func (d *DHT) GetPeers(id *ID) {
 	if addrs := d.lookup(id); addrs != nil {
 		data := map[string]interface{}{
 			"id":        d.ID().Bytes(),
@@ -262,16 +284,12 @@ func (d *DHT) replyGetPeers(tid []byte, addr *net.UDPAddr, tor *ID) {
 		"id":    d.ID().Bytes(),
 		"token": d.createToken(addr),
 	}
-	if peers := d.storage.GetPeers(tor); peers != nil {
-		data["values"] = nil
+	if peers := d.getPeers(tor); peers != nil {
+		data["values"] = peers
 	} else if nodes := d.route.Lookup(tor); nodes != nil {
 		data["nodes"] = encodeCompactNodes(nodes)
 	}
 	d.replyMessage(tid, addr, data)
-
-	if d.listener != nil {
-		d.listener.GetPeers(nil, tor)
-	}
 }
 
 func (d *DHT) replyAnnouncePeer(tid []byte, addr *net.UDPAddr, req *KadRequest) {
@@ -284,8 +302,14 @@ func (d *DHT) replyAnnouncePeer(tid []byte, addr *net.UDPAddr, req *KadRequest) 
 	}
 	d.replyMessage(tid, addr, data)
 
-	if d.listener != nil {
-		d.listener.AnnouncePeer(nil, req.InfoHash(), nil)
+	tor, err := NewID(req.InfoHash())
+	if err != nil {
+		return
+	}
+	peer := fmt.Sprintf("%s:%d", addr.IP.String(), req.Port())
+	err = d.storePeer(tor, peer)
+	if err != nil {
+		return
 	}
 }
 
@@ -314,6 +338,28 @@ func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) (n *Node, err error) {
 			n, err = d.route.Insert(id, addr)
 		}
 		b.Update()
+	}
+	return
+}
+
+func (d *DHT) storePeer(tor *ID, peer string) error {
+	if d.storages.Count() > 102400 {
+		return errors.New("102400")
+	}
+	s := d.storages.Get(tor)
+	if s.Count() > 1024 {
+		return errors.New("1024")
+	}
+	s.Insert(peer)
+	return nil
+}
+
+func (d *DHT) getPeers(tor *ID) (ps []string) {
+	if s := d.storages.Find(tor); s != nil {
+		s.Map(func(peer string, time time.Time) bool {
+			ps = append(ps, peer)
+			return len(ps) < d.route.ksize
+		})
 	}
 	return
 }

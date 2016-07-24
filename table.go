@@ -27,6 +27,11 @@ func NewTable(id *ID, ksize int) *Table {
 	return t
 }
 
+// KSize returns bucket capaticy
+func (t *Table) KSize() int {
+	return t.ksize
+}
+
 // Insert a node
 func (t *Table) Insert(id *ID, addr *net.UDPAddr) (*Node, error) {
 	if id.Compare(t.id) == 0 {

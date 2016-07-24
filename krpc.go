@@ -70,31 +70,8 @@ func (e *KadErrorMessage) String() string {
 	return e.Data[1].(string)
 }
 
-type KadMethodType int
-
-const (
-	PingMethod KadMethodType = iota
-	FindNodeMethod
-	GetPeersMethod
-	AnnouncePeerMethod
-)
-
 type KadQueryMethod struct {
 	Q string `bencode:"q"`
-}
-
-func (m *KadQueryMethod) Type() (t KadMethodType) {
-	switch m.Q {
-	case "ping":
-		t = PingMethod
-	case "find_node":
-		t = FindNodeMethod
-	case "get_peers":
-		t = GetPeersMethod
-	case "announce_peer":
-		t = AnnouncePeerMethod
-	}
-	return
 }
 
 type KadQueryMessage struct {
@@ -155,7 +132,7 @@ type KadRequest struct {
 		Port     int64  `bencode:"port"`
 		Token    string `bencode:"token"`
 		Target   string `bencode:"target"`
-		InfoHash string `bencode:"info_hash"`
+		InfoHash []byte `bencode:"info_hash"`
 	} `bencode:"a"`
 }
 
@@ -170,8 +147,8 @@ func (q *KadRequest) ID() (id *ID) {
 }
 */
 
-func (q *KadRequest) Port() int64 {
-	return q.Data.Port
+func (q *KadRequest) Port() int {
+	return int(q.Data.Port)
 }
 
 func (q *KadRequest) Token() []byte {
@@ -183,9 +160,8 @@ func (q *KadRequest) Target() (id *ID) {
 	return
 }
 
-func (q *KadRequest) InfoHash() (id *ID) {
-	id, _ = NewID([]byte(q.Data.InfoHash))
-	return
+func (q *KadRequest) InfoHash() []byte {
+	return q.Data.InfoHash
 }
 
 type KadResponse struct {
@@ -244,10 +220,11 @@ func DecodeCompactNode(b []byte) map[*ID]*net.UDPAddr {
 	return nodes
 }
 
-func EncodeCompactPeer(peers []*Peer) [][]byte {
-	return nil
-}
+type KadMethod int
 
-func DecodeCompactPeer(b []string) []string {
-	return nil
-}
+const (
+	Ping KadMethod = iota
+	FindNode
+	GetPeers
+	AnnouncePeer
+)
