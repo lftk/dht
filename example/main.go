@@ -11,6 +11,11 @@ import (
 	"github.com/4396/dht"
 )
 
+func resolveAddr(b []byte) string {
+	ip, port := dht.ResolveAddr(b)
+	return fmt.Sprintf("%s:%d", ip, port)
+}
+
 type dhtQueryTracker struct {
 	d *dht.DHT
 }
@@ -31,14 +36,14 @@ func (t *dhtQueryTracker) GetPeers(id *dht.ID, tor *dht.ID) {
 var tid int64
 var tors string
 
-func (t *dhtQueryTracker) AnnouncePeer(id *dht.ID, tor *dht.ID, peer string) {
+func (t *dhtQueryTracker) AnnouncePeer(id *dht.ID, tor *dht.ID, peer []byte) {
 	if tid++; tid%1000 == 0 {
 		tors = ""
 	}
 	s := fmt.Sprintln("ap", tid, tor)
 	tors = s + tors
 
-	fmt.Println(peer)
+	fmt.Println("ap", string(peer), resolveAddr(peer))
 }
 
 type dhtReplyTracker struct {
@@ -51,7 +56,11 @@ func (t *dhtReplyTracker) Ping(id *dht.ID) {
 func (t *dhtReplyTracker) FindNode(id *dht.ID, nodes []byte) {
 }
 
-func (t *dhtReplyTracker) GetPeers(id *dht.ID, peers []string, nodes []byte) {
+func (t *dhtReplyTracker) GetPeers(id *dht.ID, peers [][]byte, nodes []byte) {
+	fmt.Println("----GetPeers")
+	for _, p := range peers {
+		fmt.Println("gp", string(p), resolveAddr(p))
+	}
 }
 
 func (t *dhtReplyTracker) AnnouncePeer(id *dht.ID) {
@@ -182,9 +191,11 @@ func main() {
 				}
 			case <-checkup:
 				var numNodes2 int
+				tor, _ := dht.ResolveID("004aa73f1a3001fb6ecf545336f155123aee4941")
 				for _, s := range svrs {
 					if n := s.d.Route().NumNodes(); n < 1024 {
 						s.d.FindNode(s.d.ID())
+						s.d.GetPeers(tor)
 						numNodes2 += n
 					}
 				}
