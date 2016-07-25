@@ -167,7 +167,7 @@ func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *KadRespons
 	}
 	d.insertOrUpdate(id, addr)
 
-	q, no := decodeTID(tid)
+	q, _ := decodeTID(tid)
 
 	switch q {
 	case "ping":
@@ -186,7 +186,9 @@ func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *KadRespons
 			t.GetPeers(id, resp.Values, resp.Nodes)
 		}
 	case "announce_peer":
-		_ = no
+		if t != nil {
+			t.AnnouncePeer(id)
+		}
 	}
 	return
 }
@@ -250,18 +252,8 @@ func (d *DHT) FindNodeFromAddrs(id *ID, addrs []*net.UDPAddr) (int, error) {
 
 // FindNode find node
 func (d *DHT) FindNode(id *ID) (err error) {
-	if addrs := d.lookup(id); addrs != nil {
-		data := map[string]interface{}{
-			"id":     d.ID().Bytes(),
-			"target": id.Bytes(),
-		}
-		d.batchQueryMessage("find_node", 0, addrs, data)
-	}
+	_, err = d.FindNodeFromAddrs(id, d.lookup(id))
 	return
-}
-
-func (d *DHT) findNode(id *ID) {
-	d.findNode(id)
 }
 
 // GetPeers search info hash
@@ -275,7 +267,8 @@ func (d *DHT) GetPeers(id *ID) {
 	}
 }
 
-func (d *DHT) announcePeer() {
+// AnnouncePeer announce other peer
+func (d *DHT) AnnouncePeer(id *ID) {
 }
 
 func (d *DHT) replyPing(addr *net.UDPAddr, tid []byte) {
@@ -434,37 +427,36 @@ func (d *DHT) batchQueryMessage(q string, no int16, addrs []*net.UDPAddr, data m
 }
 
 var (
-	tids = map[string]string{
-		"ping": "pnpn", "find_node": "fnfn",
-		"get_peers": "gpgp", "announce_peer": "apap",
+	tidVals = map[string]string{
+		"ping": "pn", "find_node": "fn", "get_peers": "gp", "announce_peer": "ap",
 	}
-	vals = map[string]string{
-		"pn": "ping", "fn": "find_node",
-		"gp": "get_peers", "ap": "announce_peer",
+	tidNames = map[string]string{
+		"pn": "ping", "fn": "find_node", "gp": "get_peers", "ap": "announce_peer",
 	}
 )
 
-func encodeTID(q string, id int16) (val []byte) {
-	if tid, ok := tids[q]; ok {
+func encodeTID(q string, id int16) (tid []byte) {
+	if val, ok := tidVals[q]; ok {
 		uid := uint16(id)
 		if id <= 0 {
 			uid = math.MaxUint16
 		}
-		val = []byte(tid)
-		val[2] = byte(uid & 0xFF00 >> 8)
-		val[3] = byte(uid & 0x00FF)
+		tid = make([]byte, 4)
+		copy(tid[:2], val[:2])
+		tid[2] = byte(uid & 0xFF00 >> 8)
+		tid[3] = byte(uid & 0x00FF)
 	}
 	return
 }
 
 func decodeTID(tid []byte) (q string, id int16) {
 	if len(tid) == 4 {
-		if val, ok := vals[string(tid[:2])]; ok {
+		if name, ok := tidNames[string(tid[:2])]; ok {
 			uid := (uint16(tid[2]) << 8) | uint16(tid[3])
 			if uid != math.MaxUint16 {
 				id = int16(uid)
 			}
-			q = val
+			q = name
 		}
 	}
 	return
