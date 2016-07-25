@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 
@@ -50,41 +49,6 @@ func NewReplyMessage(tid []byte, data map[string]interface{}) *KadReplyMessage {
 	return &KadReplyMessage{tid, "r", data}
 }
 
-func EncodeCompactNode(nodes map[*ID]*net.UDPAddr) []byte {
-	ip := make([]byte, 4)
-	buf := bytes.NewBuffer(nil)
-	for id, addr := range nodes {
-		n, err := fmt.Sscanf(addr.IP.String(), "%d.%d.%d.%d", &ip[0], &ip[1], &ip[2], &ip[3])
-		if err != nil || n != 4 {
-			continue
-		}
-		buf.Write(id.Bytes())
-		buf.Write(ip)
-		buf.WriteByte(byte(addr.Port >> 8))
-		buf.WriteByte(byte(addr.Port))
-	}
-	return buf.Bytes()
-}
-
-func DecodeCompactNode(b []byte) map[*ID]*net.UDPAddr {
-	nodes := make(map[*ID]*net.UDPAddr)
-	for i := 0; i < len(b)/26; i++ {
-		bi := b[i*26:]
-		id, err := NewID(bi[:20])
-		if err != nil {
-			continue
-		}
-		s := fmt.Sprintf("%d.%d.%d.%d:%d", bi[20], bi[21],
-			bi[22], bi[23], (uint16(bi[24])<<8)|uint16(bi[25]))
-		addr, err := net.ResolveUDPAddr("udp", s)
-		if err != nil {
-			continue
-		}
-		nodes[id] = addr
-	}
-	return nodes
-}
-
 type KadArguments struct {
 	ID       []byte `bencode:"id"`
 	Port     int64  `bencode:"port"`
@@ -97,7 +61,7 @@ type KadResponse struct {
 	ID     []byte   `bencode:"id"`
 	Token  []byte   `bencode:"token"`
 	Nodes  []byte   `bencode:"nodes"`
-	Values []string `bencode:"values"`
+	Values [][]byte `bencode:"values"`
 }
 
 type KadMessage struct {
@@ -107,4 +71,12 @@ type KadMessage struct {
 	E []interface{} `bencode:"e"`
 	A KadArguments  `bencode:"a"`
 	R KadResponse   `bencode:"r"`
+}
+
+func ResolveAddr(addr []byte) (ip string, port int) {
+	if n := len(addr); n == 6 {
+		ip = net.IPv4(addr[0], addr[1], addr[2], addr[3]).String()
+		port = (int(addr[4]) << 8) | int(addr[5])
+	}
+	return
 }

@@ -16,21 +16,25 @@ func newStorage(id *ID) *storage {
 	}
 }
 
+func (s *storage) ID() *ID {
+	return s.id
+}
+
 func (s *storage) Count() int {
 	return len(s.ps)
 }
 
-func (s *storage) Insert(peer string) {
-	s.ps[peer] = time.Now()
+func (s *storage) Insert(peer []byte) {
+	s.ps[string(peer)] = time.Now()
 }
 
-func (s *storage) Remove(peer string) {
-	delete(s.ps, peer)
+func (s *storage) Remove(peer []byte) {
+	delete(s.ps, string(peer))
 }
 
-func (s *storage) Map(f func(p string, t time.Time) bool) {
+func (s *storage) Map(f func(p []byte, t time.Time) bool) {
 	for peer, time := range s.ps {
-		if f(peer, time) == false {
+		if f([]byte(peer), time) == false {
 			return
 		}
 	}
@@ -63,4 +67,16 @@ func (s *storages) Get(id *ID) (st *storage) {
 		s.ss[*id] = st
 	}
 	return
+}
+
+func (s *storages) Remove(id *ID) {
+	delete(s.ss, *id)
+}
+
+func (s *storages) Map(f func(st *storage) bool) {
+	for _, st := range s.ss {
+		if f(st) == false {
+			return
+		}
+	}
 }

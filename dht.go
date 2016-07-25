@@ -1,6 +1,7 @@
 package dht
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -12,7 +13,7 @@ import (
 type DHT struct {
 	conn     *net.UDPConn
 	route    *Table
-	secret   *Secret
+	secret   *secret
 	storages *storages
 	tsecret  time.Time
 }
@@ -22,8 +23,9 @@ func NewDHT(id *ID, conn *net.UDPConn, ksize int) *DHT {
 	return &DHT{
 		conn:     conn,
 		route:    NewTable(id, ksize),
-		secret:   NewSecret(),
+		secret:   newSecret(),
 		storages: newStorages(),
+		tsecret:  time.Now(),
 	}
 }
 
@@ -73,7 +75,27 @@ func (d *DHT) cleanNodes(tm time.Duration) {
 }
 
 func (d *DHT) cleanPeers(tm time.Duration) {
-
+	var ss []*ID
+	d.storages.Map(func(st *storage) bool {
+		var peers [][]byte
+		st.Map(func(p []byte, t time.Time) bool {
+			if time.Since(t) > tm {
+				peers = append(peers, p)
+			}
+			return true
+		})
+		if len(peers) == st.Count() {
+			ss = append(ss, st.ID())
+		} else {
+			for _, p := range peers {
+				st.Remove(p)
+			}
+		}
+		return true
+	})
+	for _, s := range ss {
+		d.storages.Remove(s)
+	}
 }
 
 // DoTimer update secret, clean nodes and peers
@@ -150,7 +172,7 @@ func (d *DHT) handleQueryMessage(addr *net.UDPAddr, tid []byte, meth string, arg
 	case "announce_peer":
 		tor, err := NewID(args.InfoHash)
 		if err == nil {
-			peer := fmt.Sprintf("%s:%d", addr.IP.String(), args.Port)
+			peer := createPeer(addr.IP, int(args.Port))
 			d.replyAnnouncePeer(addr, tid, args.Token, tor, peer)
 			if t != nil {
 				t.AnnouncePeer(id, tor, peer)
@@ -193,16 +215,13 @@ func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *KadRespons
 	return
 }
 
-func (d *DHT) handlePing() {
-}
-
 func (d *DHT) handleFindNode(nodes []byte) {
-	for id, addr := range DecodeCompactNode(nodes) {
+	for id, addr := range decodeCompactNode(nodes) {
 		d.insertOrUpdate(id, addr)
 	}
 }
 
-func (d *DHT) handleGetPeers(tor *ID, values []string, nodes []byte) {
+func (d *DHT) handleGetPeers(tor *ID, values [][]byte, nodes []byte) {
 	if tor == nil {
 		return
 	}
@@ -211,7 +230,7 @@ func (d *DHT) handleGetPeers(tor *ID, values []string, nodes []byte) {
 			d.storePeer(tor, peer)
 		}
 	} else if len(nodes) > 0 {
-		for id, addr := range DecodeCompactNode(nodes) {
+		for id, addr := range decodeCompactNode(nodes) {
 			d.insertOrUpdate(id, addr)
 		}
 	}
@@ -257,11 +276,11 @@ func (d *DHT) FindNode(id *ID) (err error) {
 }
 
 // GetPeers search info hash
-func (d *DHT) GetPeers(id *ID) {
-	if addrs := d.lookup(id); addrs != nil {
+func (d *DHT) GetPeers(tor *ID) {
+	if addrs := d.lookup(tor); addrs != nil {
 		data := map[string]interface{}{
 			"id":        d.ID().Bytes(),
-			"info_hash": id.Bytes(),
+			"info_hash": tor.Bytes(),
 		}
 		d.batchQueryMessage("get_peers", 0, addrs, data)
 	}
@@ -301,7 +320,7 @@ func (d *DHT) replyGetPeers(addr *net.UDPAddr, tid []byte, tor *ID) {
 	d.replyMessage(tid, addr, data)
 }
 
-func (d *DHT) replyAnnouncePeer(addr *net.UDPAddr, tid []byte, token []byte, tor *ID, peer string) {
+func (d *DHT) replyAnnouncePeer(addr *net.UDPAddr, tid []byte, token []byte, tor *ID, peer []byte) {
 	if d.matchToken(addr, token) == false {
 		// send error message
 		return
@@ -346,7 +365,7 @@ func (d *DHT) insertOrUpdate(id *ID, addr *net.UDPAddr) (n *Node, err error) {
 	return
 }
 
-func (d *DHT) storePeer(tor *ID, peer string) error {
+func (d *DHT) storePeer(tor *ID, peer []byte) error {
 	if d.storages.Count() > 102400 {
 		return errors.New("102400")
 	}
@@ -358,9 +377,9 @@ func (d *DHT) storePeer(tor *ID, peer string) error {
 	return nil
 }
 
-func (d *DHT) getPeers(tor *ID) (ps []string) {
+func (d *DHT) getPeers(tor *ID) (ps [][]byte) {
 	if s := d.storages.Find(tor); s != nil {
-		s.Map(func(peer string, time time.Time) bool {
+		s.Map(func(peer []byte, time time.Time) bool {
 			ps = append(ps, peer)
 			return len(ps) < d.route.ksize
 		})
@@ -369,11 +388,33 @@ func (d *DHT) getPeers(tor *ID) (ps []string) {
 }
 
 func encodeCompactNodes(nodes []*Node) []byte {
-	infos := make(map[*ID]*net.UDPAddr)
+	buf := bytes.NewBuffer(nil)
 	for _, n := range nodes {
-		infos[n.ID()] = n.Addr()
+		buf.Write(n.id.Bytes())
+		buf.Write(n.addr.IP)
+		buf.WriteByte(byte(n.addr.Port >> 8))
+		buf.WriteByte(byte(n.addr.Port))
 	}
-	return EncodeCompactNode(infos)
+	return buf.Bytes()
+}
+
+func decodeCompactNode(b []byte) map[*ID]*net.UDPAddr {
+	nodes := make(map[*ID]*net.UDPAddr)
+	for i := 0; i < len(b)/26; i++ {
+		bi := b[i*26:]
+		id, err := NewID(bi[:20])
+		if err != nil {
+			continue
+		}
+		ip, port := ResolveAddr(bi[20:26])
+		s := fmt.Sprintf("%s:%d", ip, port)
+		addr, err := net.ResolveUDPAddr("udp", s)
+		if err != nil {
+			continue
+		}
+		nodes[id] = addr
+	}
+	return nodes
 }
 
 func (d *DHT) lookup(id *ID) (addrs []*net.UDPAddr) {
@@ -460,4 +501,14 @@ func decodeTID(tid []byte) (q string, id int16) {
 		}
 	}
 	return
+}
+
+func createPeer(ip net.IP, port int) []byte {
+	p1 := byte((port & 0xFF00) >> 8)
+	p2 := byte(port & 0x00FF)
+	buf := bytes.NewBuffer(nil)
+	buf.Write(ip)
+	buf.WriteByte(p1)
+	buf.WriteByte(p2)
+	return buf.Bytes()
 }

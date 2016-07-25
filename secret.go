@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-type Secret struct {
+type secret struct {
 	cur  []byte
 	old  []byte
 	rand *rand.Rand
 }
 
-func NewSecret() (s *Secret) {
-	s = &Secret{
+func newSecret() (s *secret) {
+	s = &secret{
 		cur:  make([]byte, 8),
 		old:  make([]byte, 8),
 		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -23,16 +23,16 @@ func NewSecret() (s *Secret) {
 	return
 }
 
-func (s *Secret) Update() {
+func (s *secret) Update() {
 	copy(s.old, s.cur)
 	s.rand.Read(s.cur)
 }
 
-func (s *Secret) Create(b []byte) []byte {
+func (s *secret) Create(b []byte) []byte {
 	return s.create(b, false)
 }
 
-func (s *Secret) create(b []byte, old bool) []byte {
+func (s *secret) create(b []byte, old bool) []byte {
 	sec := s.cur
 	if old {
 		sec = s.old
@@ -43,7 +43,7 @@ func (s *Secret) create(b []byte, old bool) []byte {
 	return h.Sum(nil)
 }
 
-func (s *Secret) Match(b, token []byte) bool {
+func (s *secret) Match(b, token []byte) bool {
 	t := string(token)
 	t1 := s.create(b, false)
 	if string(t1) == t {
