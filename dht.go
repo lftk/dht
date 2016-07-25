@@ -282,6 +282,11 @@ func (d *DHT) Search(tor *ID, cb func(event int, peer []byte)) {
 	}
 }
 
+// GetPeers returns all peers
+func (d *DHT) GetPeers(tor *ID) [][]byte {
+	return d.getPeers(tor, 0)
+}
+
 func (d *DHT) announcePeer(tor *ID, port int, addr *net.UDPAddr, token []byte) error {
 	data := map[string]interface{}{
 		"id":        d.ID().Bytes(),
@@ -314,7 +319,7 @@ func (d *DHT) replyGetPeers(addr *net.UDPAddr, tid []byte, tor *ID) {
 		"id":    d.ID().Bytes(),
 		"token": d.createToken(addr),
 	}
-	if peers := d.getPeers(tor); peers != nil {
+	if peers := d.getPeers(tor, d.route.ksize); peers != nil {
 		data["values"] = peers
 	} else if nodes := d.route.Lookup(tor); nodes != nil {
 		data["nodes"] = encodeCompactNodes(nodes)
@@ -379,11 +384,11 @@ func (d *DHT) storePeer(tor *ID, peer []byte) error {
 	return nil
 }
 
-func (d *DHT) getPeers(tor *ID) (ps [][]byte) {
+func (d *DHT) getPeers(tor *ID, max int) (ps [][]byte) {
 	if s := d.storages.Find(tor); s != nil {
 		s.Map(func(peer []byte, time time.Time) bool {
 			ps = append(ps, peer)
-			return len(ps) < d.route.ksize
+			return max <= 0 || len(ps) < max
 		})
 	}
 	return
