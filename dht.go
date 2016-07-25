@@ -64,7 +64,7 @@ func (d *DHT) cleanNodes(tm time.Duration) {
 					return true
 				}
 				if time.Since(n.time) > tm {
-					d.Ping(n.addr)
+					d.ping(n.addr)
 					n.pinged++
 				}
 				return false
@@ -121,23 +121,9 @@ func (d *DHT) HandleMessage(addr *net.UDPAddr, data []byte, t *Tracker) (err err
 	case "r":
 		err = d.handleReplyMessage(addr, msg.T, &msg.R, t.r)
 	case "e":
-		err = d.handleErrorMessage(msg.E, t.e)
+		err = d.handleErrorMessage(addr, msg.E, t.e)
 	}
 	return
-}
-
-func (d *DHT) handleErrorMessage(err []interface{}, t ErrorTracker) error {
-	if len(err) == 2 {
-		val, ok0 := err[0].(int64)
-		str, ok1 := err[1].(string)
-		if ok0 && ok1 {
-			if t != nil {
-				t.Error(int(val), str)
-			}
-			return nil
-		}
-	}
-	return errors.New("Is not a standard error message")
 }
 
 func (d *DHT) handleQueryMessage(addr *net.UDPAddr, tid []byte, meth string, args *KadArguments, t QueryTracker) (err error) {
@@ -215,6 +201,20 @@ func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *KadRespons
 	return
 }
 
+func (d *DHT) handleErrorMessage(addr *net.UDPAddr, err []interface{}, t ErrorTracker) error {
+	if len(err) == 2 {
+		val, ok0 := err[0].(int64)
+		str, ok1 := err[1].(string)
+		if ok0 && ok1 {
+			if t != nil {
+				t.Error(int(val), str)
+			}
+			return nil
+		}
+	}
+	return errors.New("Is not a standard error message")
+}
+
 func (d *DHT) handleFindNode(nodes []byte) {
 	for id, addr := range decodeCompactNode(nodes) {
 		d.insertOrUpdate(id, addr)
@@ -240,15 +240,11 @@ func (d *DHT) handleAnnouncePeer() {
 }
 
 // Ping a address
-func (d *DHT) Ping(addr *net.UDPAddr) error {
+func (d *DHT) ping(addr *net.UDPAddr) error {
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
 	}
 	return d.queryMessage("ping", 0, addr, data)
-}
-
-func (d *DHT) ping(n *Node) {
-	d.Ping(n.Addr())
 }
 
 // FindNodeFromAddr find node from address
@@ -275,8 +271,8 @@ func (d *DHT) FindNode(id *ID) (err error) {
 	return
 }
 
-// GetPeers search info hash
-func (d *DHT) GetPeers(tor *ID) {
+// Search info hash
+func (d *DHT) Search(tor *ID, cb func(event int, peer []byte)) {
 	if addrs := d.lookup(tor); addrs != nil {
 		data := map[string]interface{}{
 			"id":        d.ID().Bytes(),
@@ -286,8 +282,14 @@ func (d *DHT) GetPeers(tor *ID) {
 	}
 }
 
-// AnnouncePeer announce other peer
-func (d *DHT) AnnouncePeer(id *ID) {
+func (d *DHT) announcePeer(tor *ID, port int, addr *net.UDPAddr, token []byte) error {
+	data := map[string]interface{}{
+		"id":        d.ID().Bytes(),
+		"info_hash": tor.Bytes(),
+		"port":      port,
+		"token":     token,
+	}
+	return d.queryMessage("announce_peer", 0, addr, data)
 }
 
 func (d *DHT) replyPing(addr *net.UDPAddr, tid []byte) {
