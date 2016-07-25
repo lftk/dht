@@ -2,6 +2,7 @@ package dht
 
 import (
 	"container/list"
+	"math"
 	"time"
 )
 
@@ -14,16 +15,16 @@ type node struct {
 }
 
 type search struct {
-	tid   int16
 	tor   *ID
+	port  int
 	cb    CallBack
 	nodes *list.List
 }
 
-func newSearch(tid int16, tor *ID, cb CallBack) *search {
+func newSearch(tor *ID, port int, cb CallBack) *search {
 	return &search{
-		tid:   tid,
 		tor:   tor,
+		port:  port,
 		cb:    cb,
 		nodes: list.New(),
 	}
@@ -58,7 +59,8 @@ func (s *search) handle(f func(e *list.Element) bool) {
 }
 
 type searches struct {
-	ss map[int16]*search
+	tid int16
+	ss  map[int16]*search
 }
 
 func newSearches() *searches {
@@ -67,22 +69,58 @@ func newSearches() *searches {
 	}
 }
 
-func (s *searches) Find(tid int16) *search {
+func (s *searches) Count() int {
+	return len(s.ss)
+}
+
+func (s *searches) Get(tid int16) *search {
 	if sr, ok := s.ss[tid]; ok {
 		return sr
 	}
 	return nil
 }
 
-func (s *searches) Insert(tid int16, tor *ID, cb CallBack) *search {
-	sr := newSearch(tid, tor, cb)
-	s.ss[tid] = sr
-	return sr
+func (s *searches) Find(tor *ID) (tid int16, sr *search) {
+	tid = -1
+	s.Map(func(t int16, s *search) bool {
+		if s.tor.Compare(tor) == 0 {
+			tid = t
+			sr = s
+			return false
+		}
+		return false
+	})
+	return
 }
 
-func (s *searches) Map(f func(s *search) bool) {
-	for _, sr := range s.ss {
-		if f(sr) == false {
+func (s *searches) nextTID() int16 {
+	if n := s.Count(); n < math.MaxInt16 {
+		for i := 0; i <= n; i++ {
+			tid := s.tid
+			if s.tid == math.MaxInt16 {
+				s.tid = 0
+			} else {
+				s.tid++
+			}
+			if s.Get(tid) == nil {
+				return tid
+			}
+		}
+	}
+	return -1
+}
+
+func (s *searches) Insert(tor *ID, port int, cb CallBack) (tid int16, sr *search) {
+	if tid = s.nextTID(); tid != -1 {
+		sr = newSearch(tor, port, cb)
+		s.ss[tid] = sr
+	}
+	return
+}
+
+func (s *searches) Map(f func(tid int16, sr *search) bool) {
+	for tid, sr := range s.ss {
+		if f(tid, sr) == false {
 			return
 		}
 	}

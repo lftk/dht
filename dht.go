@@ -14,6 +14,7 @@ type DHT struct {
 	conn     *net.UDPConn
 	route    *Table
 	secret   *secret
+	searches *searches
 	storages *storages
 	tsecret  time.Time
 }
@@ -24,6 +25,7 @@ func NewDHT(id *ID, conn *net.UDPConn, ksize int) *DHT {
 		conn:     conn,
 		route:    NewTable(id, ksize),
 		secret:   newSecret(),
+		searches: newSearches(),
 		storages: newStorages(),
 		tsecret:  time.Now(),
 	}
@@ -272,14 +274,26 @@ func (d *DHT) FindNode(id *ID) (err error) {
 }
 
 // Search info hash
-func (d *DHT) Search(tor *ID, port int, cb func(done bool, peer []byte)) {
+func (d *DHT) Search(tor *ID, port int, cb CallBack) error {
+	tid, _ := d.searches.Find(tor)
+	if tid != -1 {
+		return fmt.Errorf("")
+	}
+
+	tid, sr := d.searches.Insert(tor, port, cb)
+	if tid == -1 {
+		return fmt.Errorf("")
+	}
+	_ = sr
+
 	if addrs := d.lookup(tor); addrs != nil {
 		data := map[string]interface{}{
 			"id":        d.ID().Bytes(),
 			"info_hash": tor.Bytes(),
 		}
-		d.batchQueryMessage("get_peers", 0, addrs, data)
+		d.batchQueryMessage("get_peers", tid, addrs, data)
 	}
+	return nil
 }
 
 // GetPeers returns all peers
