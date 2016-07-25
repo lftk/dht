@@ -272,7 +272,7 @@ func (d *DHT) FindNode(id *ID) (err error) {
 }
 
 // Search info hash
-func (d *DHT) Search(tor *ID, cb func(event int, peer []byte)) {
+func (d *DHT) Search(tor *ID, port int, cb func(done bool, peer []byte)) {
 	if addrs := d.lookup(tor); addrs != nil {
 		data := map[string]interface{}{
 			"id":        d.ID().Bytes(),

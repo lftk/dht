@@ -53,15 +53,15 @@ func (b *Bucket) Insert(id *ID, addr *net.UDPAddr) (n *Node) {
 	return
 }
 
-// Remove a node, return true if exist node
-func (b *Bucket) Remove(id *ID) bool {
-	for e := b.nodes.Front(); e != nil; e = e.Next() {
+// Remove a node
+func (b *Bucket) Remove(id *ID) {
+	b.handle(func(e *list.Element) bool {
 		if e.Value.(*Node).id.Compare(id) == 0 {
 			b.nodes.Remove(e)
-			return true
+			return false
 		}
-	}
-	return false
+		return true
+	})
 }
 
 // Find returns node
