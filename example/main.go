@@ -43,7 +43,7 @@ func (t *dhtQueryTracker) AnnouncePeer(id *dht.ID, tor *dht.ID, peer []byte) {
 	s := fmt.Sprintln("ap", tid, tor)
 	tors = s + tors
 
-	fmt.Println("ap", string(peer), resolveAddr(peer))
+	fmt.Println("ap", resolveAddr(peer))
 }
 
 type dhtReplyTracker struct {
@@ -57,9 +57,9 @@ func (t *dhtReplyTracker) FindNode(id *dht.ID, nodes []byte) {
 }
 
 func (t *dhtReplyTracker) GetPeers(id *dht.ID, peers [][]byte, nodes []byte) {
-	fmt.Println("----GetPeers")
-	for _, p := range peers {
-		fmt.Println("gp", string(p), resolveAddr(p))
+	//fmt.Println("----GetPeers")
+	for _, peer := range peers {
+		fmt.Println("gp", resolveAddr(peer))
 	}
 }
 
@@ -124,6 +124,16 @@ func initDHTServer(d *dht.DHT) (err error) {
 	return
 }
 
+func searchInfoHash(d *dht.DHT, tor *dht.ID) {
+	d.Search(tor, func(tid int16, peer []byte) {
+		if peer != nil {
+			fmt.Println(d.ID(), tid, resolveAddr(peer))
+		} else {
+			fmt.Println(d.ID(), tid, "done")
+		}
+	})
+}
+
 type udpMessage struct {
 	idx  int
 	addr *net.UDPAddr
@@ -186,7 +196,7 @@ func main() {
 			case <-timer:
 				for _, s := range svrs {
 					if n := s.d.Route().NumNodes(); n < 1024 {
-						s.d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6)
+						s.d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6, time.Minute*5)
 					}
 				}
 			case <-checkup:
@@ -195,7 +205,7 @@ func main() {
 				for _, s := range svrs {
 					if n := s.d.Route().NumNodes(); n < 1024 {
 						s.d.FindNode(s.d.ID())
-						s.d.GetPeers(tor)
+						searchInfoHash(s.d, tor)
 						numNodes2 += n
 					}
 				}
