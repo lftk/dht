@@ -1,8 +1,8 @@
 package dht
 
 import (
-	"container/list"
 	"math"
+	"net"
 	"time"
 )
 
@@ -10,49 +10,57 @@ import (
 type CallBack func(tid int16, peer []byte)
 
 type node struct {
-	id   *ID
-	time time.Time
+	id      *ID
+	addr    *net.UDPAddr
+	replied bool
+	acked   bool
+	time    time.Time
 }
 
 type search struct {
 	tor   *ID
-	port  int
 	cb    CallBack
-	nodes *list.List
+	nodes map[ID]*node
 }
 
-func newSearch(tor *ID, port int, cb CallBack) *search {
+func newSearch(tor *ID, cb CallBack) *search {
 	return &search{
 		tor:   tor,
-		port:  port,
 		cb:    cb,
-		nodes: list.New(),
+		nodes: make(map[ID]*node),
 	}
 }
 
 func (s *search) Count() int {
-	return s.nodes.Len()
+	return len(s.nodes)
+}
+
+func (s *search) Get(id *ID) *node {
+	if n, ok := s.nodes[*id]; ok {
+		return n
+	}
+	return nil
+}
+
+func (s *search) Insert(id *ID, addr *net.UDPAddr) (n *node) {
+	if n, ok := s.nodes[*id]; !ok {
+		n = &node{
+			id:   id,
+			addr: addr,
+			time: time.Now(),
+		}
+		s.nodes[*id] = n
+	}
+	return
 }
 
 func (s *search) Remove(id *ID) {
-	s.handle(func(e *list.Element) bool {
-		if e.Value.(*node).id.Compare(id) == 0 {
-			s.nodes.Remove(e)
-			return false
-		}
-		return true
-	})
+	delete(s.nodes, *id)
 }
 
-func (s *search) Map(f func(n *node) bool) {
-	s.handle(func(e *list.Element) bool {
-		return f(e.Value.(*node))
-	})
-}
-
-func (s *search) handle(f func(e *list.Element) bool) {
-	for e := s.nodes.Front(); e != nil; e = e.Next() {
-		if f(e) == false {
+func (s *search) Map(f func(*node) bool) {
+	for _, n := range s.nodes {
+		if f(n) == false {
 			return
 		}
 	}
@@ -110,15 +118,15 @@ func (s *searches) nextTID() int16 {
 	return -1
 }
 
-func (s *searches) Insert(tor *ID, port int, cb CallBack) (tid int16, sr *search) {
+func (s *searches) Insert(tor *ID, cb CallBack) (tid int16, sr *search) {
 	if tid = s.nextTID(); tid != -1 {
-		sr = newSearch(tor, port, cb)
+		sr = newSearch(tor, cb)
 		s.ss[tid] = sr
 	}
 	return
 }
 
-func (s *searches) Map(f func(tid int16, sr *search) bool) {
+func (s *searches) Map(f func(int16, *search) bool) {
 	for tid, sr := range s.ss {
 		if f(tid, sr) == false {
 			return

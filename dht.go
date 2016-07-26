@@ -177,8 +177,7 @@ func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *KadRespons
 	}
 	d.insertOrUpdate(id, addr)
 
-	q, _ := decodeTID(tid)
-
+	q, no := decodeTID(tid)
 	switch q {
 	case "ping":
 		if t != nil {
@@ -190,8 +189,7 @@ func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *KadRespons
 			t.FindNode(id, nil)
 		}
 	case "get_peers":
-		var tor *ID
-		d.handleGetPeers(tor, resp.Values, resp.Nodes)
+		d.handleGetPeers(no, id, resp.Values, resp.Nodes)
 		if t != nil {
 			t.GetPeers(id, resp.Values, resp.Nodes)
 		}
@@ -223,17 +221,32 @@ func (d *DHT) handleFindNode(nodes []byte) {
 	}
 }
 
-func (d *DHT) handleGetPeers(tor *ID, values [][]byte, nodes []byte) {
-	if tor == nil {
+func (d *DHT) handleGetPeers(tid int16, id *ID, values [][]byte, nodes []byte) {
+	sr := d.searches.Get(tid)
+	if sr == nil {
 		return
 	}
+	if sn := sr.Get(id); sn != nil {
+		sn.replied = true
+	} else {
+		return
+	}
+
 	if len(values) > 0 {
 		for _, peer := range values {
-			d.storePeer(tor, peer)
+			d.storePeer(sr.tor, peer)
 		}
 	} else if len(nodes) > 0 {
+		var addrs []*net.UDPAddr
 		for id, addr := range decodeCompactNode(nodes) {
 			d.insertOrUpdate(id, addr)
+			sn := sr.Insert(id, addr)
+			if sn.replied == false {
+				addrs = append(addrs, addr)
+			}
+		}
+		if addrs != nil {
+			d.search(tid, sr.tor, addrs)
 		}
 	}
 }
@@ -274,26 +287,37 @@ func (d *DHT) FindNode(id *ID) (err error) {
 }
 
 // Search info hash
-func (d *DHT) Search(tor *ID, port int, cb CallBack) error {
-	tid, _ := d.searches.Find(tor)
+func (d *DHT) Search(tor *ID, cb CallBack) (tid int16, err error) {
+	tid, _ = d.searches.Find(tor)
 	if tid != -1 {
-		return fmt.Errorf("")
+		err = errors.New("")
+		return
 	}
-
-	tid, sr := d.searches.Insert(tor, port, cb)
+	tid, sr := d.searches.Insert(tor, cb)
 	if tid == -1 {
-		return fmt.Errorf("")
+		err = errors.New("")
+		return
 	}
-	_ = sr
 
-	if addrs := d.lookup(tor); addrs != nil {
-		data := map[string]interface{}{
-			"id":        d.ID().Bytes(),
-			"info_hash": tor.Bytes(),
+	var addrs []*net.UDPAddr
+	for _, node := range d.route.Lookup(tor) {
+		sn := sr.Insert(node.id, node.addr)
+		if sn.replied == false {
+			addrs = append(addrs, node.addr)
 		}
-		d.batchQueryMessage("get_peers", tid, addrs, data)
 	}
-	return nil
+	if addrs != nil {
+		d.search(tid, tor, addrs)
+	}
+	return
+}
+
+func (d *DHT) search(tid int16, tor *ID, addrs []*net.UDPAddr) (int, error) {
+	data := map[string]interface{}{
+		"id":        d.ID().Bytes(),
+		"info_hash": tor.Bytes(),
+	}
+	return d.batchQueryMessage("get_peers", tid, addrs, data)
 }
 
 // GetPeers returns all peers
@@ -492,7 +516,7 @@ var (
 	tidVals = map[string]string{
 		"ping": "pn", "find_node": "fn", "get_peers": "gp", "announce_peer": "ap",
 	}
-	tidNames = map[string]string{
+	tidFuns = map[string]string{
 		"pn": "ping", "fn": "find_node", "gp": "get_peers", "ap": "announce_peer",
 	}
 )
@@ -513,12 +537,12 @@ func encodeTID(q string, id int16) (tid []byte) {
 
 func decodeTID(tid []byte) (q string, id int16) {
 	if len(tid) == 4 {
-		if name, ok := tidNames[string(tid[:2])]; ok {
+		if fun, ok := tidFuns[string(tid[:2])]; ok {
 			uid := (uint16(tid[2]) << 8) | uint16(tid[3])
 			if uid != math.MaxUint16 {
 				id = int16(uid)
 			}
-			q = name
+			q = fun
 		}
 	}
 	return
