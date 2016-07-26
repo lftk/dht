@@ -10,11 +10,10 @@ import (
 type CallBack func(tid int16, peer []byte)
 
 type node struct {
-	id      *ID
-	addr    *net.UDPAddr
-	replied bool
-	acked   bool
-	time    time.Time
+	id    *ID
+	addr  *net.UDPAddr
+	time  time.Time
+	acked bool
 }
 
 type search struct {
@@ -43,7 +42,8 @@ func (s *search) Get(id *ID) *node {
 }
 
 func (s *search) Insert(id *ID, addr *net.UDPAddr) (n *node) {
-	if n, ok := s.nodes[*id]; !ok {
+	n, ok := s.nodes[*id]
+	if !ok {
 		n = &node{
 			id:   id,
 			addr: addr,
@@ -56,6 +56,16 @@ func (s *search) Insert(id *ID, addr *net.UDPAddr) (n *node) {
 
 func (s *search) Remove(id *ID) {
 	delete(s.nodes, *id)
+}
+
+func (s *search) Done(d time.Duration) (done bool) {
+	s.Map(func(n *node) bool {
+		if n.acked || (d != 0 && time.Since(n.time) > d) {
+			done = true
+		}
+		return done
+	})
+	return
 }
 
 func (s *search) Map(f func(*node) bool) {
@@ -124,6 +134,10 @@ func (s *searches) Insert(tor *ID, cb CallBack) (tid int16, sr *search) {
 		s.ss[tid] = sr
 	}
 	return
+}
+
+func (s *searches) Remove(tid int16) {
+	delete(s.ss, tid)
 }
 
 func (s *searches) Map(f func(int16, *search) bool) {

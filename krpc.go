@@ -7,14 +7,6 @@ import (
 	"github.com/zeebo/bencode"
 )
 
-func DecodeMessage(b []byte, val interface{}) (err error) {
-	return decodeMessage(b, val)
-}
-
-func EncodeMessage(msg interface{}) ([]byte, error) {
-	return encodeMessage(msg)
-}
-
 func decodeMessage(b []byte, val interface{}) (err error) {
 	defer func() {
 		if x := recover(); x != nil {

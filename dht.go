@@ -100,14 +100,29 @@ func (d *DHT) cleanPeers(tm time.Duration) {
 	}
 }
 
+func (d *DHT) cleanSearches(tm time.Duration) {
+	var tids []int16
+	d.searches.Map(func(tid int16, sr *search) bool {
+		if sr.Done(tm) {
+			sr.cb(tid, nil)
+			tids = append(tids, tid)
+		}
+		return true
+	})
+	for _, tid := range tids {
+		d.searches.Remove(tid)
+	}
+}
+
 // DoTimer update secret, clean nodes and peers
-func (d *DHT) DoTimer(secret, node, peer time.Duration) {
+func (d *DHT) DoTimer(secret, node, peer, search time.Duration) {
 	if time.Since(d.tsecret) >= secret {
 		d.tsecret = time.Now()
 		d.secret.Update()
 	}
 	d.cleanNodes(node)
 	d.cleanPeers(peer)
+	d.cleanSearches(search)
 }
 
 // HandleMessage handle udp packet
@@ -227,7 +242,7 @@ func (d *DHT) handleGetPeers(tid int16, id *ID, values [][]byte, nodes []byte) {
 		return
 	}
 	if sn := sr.Get(id); sn != nil {
-		sn.replied = true
+		sn.acked = true
 	} else {
 		return
 	}
@@ -235,19 +250,27 @@ func (d *DHT) handleGetPeers(tid int16, id *ID, values [][]byte, nodes []byte) {
 	if len(values) > 0 {
 		for _, peer := range values {
 			d.storePeer(sr.tor, peer)
+			sr.cb(tid, peer)
 		}
 	} else if len(nodes) > 0 {
 		var addrs []*net.UDPAddr
 		for id, addr := range decodeCompactNode(nodes) {
 			d.insertOrUpdate(id, addr)
-			sn := sr.Insert(id, addr)
-			if sn.replied == false {
-				addrs = append(addrs, addr)
+			if sr.Count() < d.route.ksize*2 {
+				sn := sr.Insert(id, addr)
+				if sn.acked == false {
+					addrs = append(addrs, addr)
+				}
 			}
 		}
 		if addrs != nil {
 			d.search(tid, sr.tor, addrs)
 		}
+	}
+
+	if sr.Done(0) {
+		sr.cb(tid, nil)
+		d.searches.Remove(tid)
 	}
 }
 
@@ -301,13 +324,13 @@ func (d *DHT) Search(tor *ID, cb CallBack) (tid int16, err error) {
 
 	var addrs []*net.UDPAddr
 	for _, node := range d.route.Lookup(tor) {
-		sn := sr.Insert(node.id, node.addr)
-		if sn.replied == false {
-			addrs = append(addrs, node.addr)
-		}
+		sr.Insert(node.id, node.addr)
+		addrs = append(addrs, node.addr)
 	}
-	if addrs != nil {
-		d.search(tid, tor, addrs)
+	if n, _ := d.search(tid, tor, addrs); n == 0 {
+		d.searches.Remove(tid)
+		err = errors.New("")
+		tid = -1
 	}
 	return
 }
