@@ -7,7 +7,7 @@ import (
 )
 
 // CallBack function
-type CallBack func(tid int16, peer []byte)
+type CallBack func(tor ID, peer []byte)
 
 type node struct {
 	id    *ID
@@ -56,6 +56,12 @@ func (s *search) Insert(id *ID, addr *net.UDPAddr) (n *node) {
 
 func (s *search) Remove(id *ID) {
 	delete(s.nodes, *id)
+}
+
+func (s *search) Notify(tor *ID, peer []byte) {
+	if s.cb != nil {
+		s.cb(*tor, peer)
+	}
 }
 
 func (s *search) Done(d time.Duration) (done bool) {

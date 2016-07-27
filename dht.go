@@ -104,7 +104,7 @@ func (d *DHT) cleanSearches(tm time.Duration) {
 	var tids []int16
 	d.searches.Map(func(tid int16, sr *search) bool {
 		if sr.Done(tm) {
-			sr.cb(tid, nil)
+			sr.Notify(sr.tor, nil)
 			tids = append(tids, tid)
 		}
 		return true
@@ -250,7 +250,7 @@ func (d *DHT) handleGetPeers(tid int16, id *ID, values [][]byte, nodes []byte) {
 	if len(values) > 0 {
 		for _, peer := range values {
 			d.storePeer(sr.tor, peer)
-			sr.cb(tid, peer)
+			sr.Notify(sr.tor, peer)
 		}
 	} else if len(nodes) > 0 {
 		var addrs []*net.UDPAddr
@@ -269,7 +269,7 @@ func (d *DHT) handleGetPeers(tid int16, id *ID, values [][]byte, nodes []byte) {
 	}
 
 	if sr.Done(0) {
-		sr.cb(tid, nil)
+		sr.Notify(sr.tor, nil)
 		d.searches.Remove(tid)
 	}
 }
@@ -320,6 +320,10 @@ func (d *DHT) Search(tor *ID, cb CallBack) (tid int16, err error) {
 	if tid == -1 {
 		err = errors.New("")
 		return
+	}
+
+	for _, peer := range d.GetPeers(tor) {
+		sr.Notify(tor, peer)
 	}
 
 	var addrs []*net.UDPAddr
