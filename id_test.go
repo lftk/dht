@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"math/rand"
 	"testing"
 )
 
@@ -20,11 +19,5 @@ func Test_NewID(t *testing.T) {
 	}
 	if id2.Compare(id) != 0 {
 		t.Fatal(id2, id)
-	}
-}
-
-func Benchmark_NewRandomID(b *testing.B) {
-	for i := 0; i < rand.Intn(10000); i++ {
-		NewRandomID()
 	}
 }

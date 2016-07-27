@@ -18,7 +18,7 @@ type ReplyTracker interface {
 
 // ErrorTracker interface
 type ErrorTracker interface {
-	Error(code int, msg string)
+	Error(val int, err string)
 }
 
 // Tracker struct

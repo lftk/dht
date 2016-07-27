@@ -3,24 +3,24 @@ package dht
 import (
 	"encoding/hex"
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
 )
 
 // ZeroID "0000000000000000000000000000000000000000"
 var ZeroID = new(ID)
 
 // ID consists of 160 bits
-type ID [20]byte
+type ID [IDLen]byte
+
+// IDLen []byte len
+const IDLen = 20
 
 // NewID returns a id
 func NewID(b []byte) (*ID, error) {
-	if len(b) != 20 {
+	if len(b) != IDLen {
 		return nil, fmt.Errorf("invalid hash")
 	}
 	id := new(ID)
-	for i := 0; i < 20; i++ {
+	for i := 0; i < IDLen; i++ {
 		id[i] = b[i]
 	}
 	return id, nil
@@ -33,31 +33,15 @@ func ResolveID(s string) (*ID, error) {
 	if err != nil {
 		return nil, err
 	}
-	if n != 20 {
+	if n != IDLen {
 		return nil, fmt.Errorf("invalid hash")
 	}
 	return id, nil
 }
 
-var idRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-var idLock = new(sync.RWMutex)
-
-// NewRandomID returns a random id
-func NewRandomID() *ID {
-	//	idLock.Lock()
-	//	defer idLock.Unlock()
-
-	id := new(ID)
-	n, err := idRand.Read(id[:])
-	if err != nil || n != 20 {
-		return ZeroID
-	}
-	return id
-}
-
 // Compare two id
 func (id *ID) Compare(o *ID) int {
-	for i := 0; i < 20; i++ {
+	for i := 0; i < IDLen; i++ {
 		if id[i] < o[i] {
 			return -1
 		} else if id[i] > o[i] {
@@ -70,7 +54,7 @@ func (id *ID) Compare(o *ID) int {
 // LowBit find the lowest 1 bit in an id
 func (id *ID) LowBit() int {
 	var i, j int
-	for i = 19; i >= 0; i-- {
+	for i = IDLen - 1; i >= 0; i-- {
 		if id[i] != 0 {
 			break
 		}

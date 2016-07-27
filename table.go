@@ -178,7 +178,7 @@ func (ln *lookupNodes) Len() int {
 }
 
 func (ln *lookupNodes) Less(i, j int) bool {
-	for k := 0; k < 20; k++ {
+	for k := 0; k < IDLen; k++ {
 		n1 := ln.nodes[i].id[k] ^ ln.id[k]
 		n2 := ln.nodes[j].id[k] ^ ln.id[k]
 		if n1 < n2 {

@@ -7,7 +7,7 @@ import (
 )
 
 // CallBack function
-type CallBack func(tor ID, peer []byte)
+type CallBack func(tor *ID, peer []byte)
 
 type node struct {
 	id    *ID
@@ -60,7 +60,7 @@ func (s *search) Remove(id *ID) {
 
 func (s *search) Notify(tor *ID, peer []byte) {
 	if s.cb != nil {
-		s.cb(*tor, peer)
+		s.cb(tor, peer)
 	}
 }
 

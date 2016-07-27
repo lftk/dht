@@ -127,7 +127,7 @@ func (d *DHT) DoTimer(secret, node, peer, search time.Duration) {
 
 // HandleMessage handle udp packet
 func (d *DHT) HandleMessage(addr *net.UDPAddr, data []byte, t *Tracker) (err error) {
-	var msg KadMessage
+	var msg kadMessage
 	err = decodeMessage(data, &msg)
 	if err != nil {
 		return
@@ -143,7 +143,7 @@ func (d *DHT) HandleMessage(addr *net.UDPAddr, data []byte, t *Tracker) (err err
 	return
 }
 
-func (d *DHT) handleQueryMessage(addr *net.UDPAddr, tid []byte, meth string, args *KadArguments, t QueryTracker) (err error) {
+func (d *DHT) handleQueryMessage(addr *net.UDPAddr, tid []byte, meth string, args *kadArguments, t QueryTracker) (err error) {
 	id, err := NewID(args.ID)
 	if err != nil {
 		return
@@ -185,7 +185,7 @@ func (d *DHT) handleQueryMessage(addr *net.UDPAddr, tid []byte, meth string, arg
 	return
 }
 
-func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *KadResponse, t ReplyTracker) (err error) {
+func (d *DHT) handleReplyMessage(addr *net.UDPAddr, tid []byte, resp *kadResponse, t ReplyTracker) (err error) {
 	id, err := NewID(resp.ID)
 	if err != nil {
 		return
@@ -472,19 +472,13 @@ func encodeCompactNodes(nodes []*Node) []byte {
 
 func decodeCompactNode(b []byte) map[*ID]*net.UDPAddr {
 	nodes := make(map[*ID]*net.UDPAddr)
-	for i := 0; i < len(b)/26; i++ {
-		bi := b[i*26:]
-		id, err := NewID(bi[:20])
-		if err != nil {
-			continue
-		}
-		ip, port := ResolveAddr(bi[20:26])
+	for id, peer := range ResolveNodes(b) {
+		ip, port := ResolvePeer(peer)
 		s := fmt.Sprintf("%s:%d", ip, port)
 		addr, err := net.ResolveUDPAddr("udp", s)
-		if err != nil {
-			continue
+		if err == nil {
+			nodes[&id] = addr
 		}
-		nodes[id] = addr
 	}
 	return nodes
 }
@@ -510,7 +504,7 @@ func (d *DHT) sendMessage(addr *net.UDPAddr, data []byte) (err error) {
 }
 
 func (d *DHT) queryMessage(q string, no int16, addr *net.UDPAddr, data map[string]interface{}) (err error) {
-	msg := NewQueryMessage(encodeTID(q, no), q, data)
+	msg := newQueryMessage(encodeTID(q, no), q, data)
 	if b, err := encodeMessage(msg); err == nil {
 		err = d.sendMessage(addr, b)
 	}
@@ -518,7 +512,7 @@ func (d *DHT) queryMessage(q string, no int16, addr *net.UDPAddr, data map[strin
 }
 
 func (d *DHT) replyMessage(tid []byte, addr *net.UDPAddr, data map[string]interface{}) (err error) {
-	msg := NewReplyMessage(tid, data)
+	msg := newReplyMessage(tid, data)
 	if b, err := encodeMessage(msg); err == nil {
 		err = d.sendMessage(addr, b)
 	}
@@ -526,7 +520,7 @@ func (d *DHT) replyMessage(tid []byte, addr *net.UDPAddr, data map[string]interf
 }
 
 func (d *DHT) batchQueryMessage(q string, no int16, addrs []*net.UDPAddr, data map[string]interface{}) (n int, err error) {
-	msg := NewQueryMessage(encodeTID(q, no), q, data)
+	msg := newQueryMessage(encodeTID(q, no), q, data)
 	if b, err := encodeMessage(msg); err == nil {
 		for _, addr := range addrs {
 			err = d.sendMessage(addr, b)
@@ -579,7 +573,7 @@ func createPeer(ip net.IP, port int) []byte {
 	p1 := byte((port & 0xFF00) >> 8)
 	p2 := byte(port & 0x00FF)
 	buf := bytes.NewBuffer(nil)
-	buf.Write(ip)
+	buf.Write(ip.To4())
 	buf.WriteByte(p1)
 	buf.WriteByte(p2)
 	return buf.Bytes()

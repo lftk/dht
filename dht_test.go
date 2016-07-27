@@ -8,9 +8,9 @@ import (
 func Test_TID(t *testing.T) {
 	testTID(t, "ping", 0)
 	testTID(t, "find_node", 0)
-	testTID(t, "get_peers", 0)
+	testTID(t, "announce_peer", 0)
 	for i := 0; i <= math.MaxInt16; i++ {
-		testTID(t, "announce_peer", int16(i))
+		testTID(t, "get_peers", int16(i))
 	}
 }
 
