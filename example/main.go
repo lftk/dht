@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"runtime"
@@ -11,8 +12,19 @@ import (
 	"github.com/4396/dht"
 )
 
+var idRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+func newRandomID() *dht.ID {
+	id := new(dht.ID)
+	n, err := idRand.Read(id[:])
+	if err != nil || n != dht.IDLen {
+		return dht.ZeroID
+	}
+	return id
+}
+
 func resolveAddr(b []byte) string {
-	ip, port := dht.ResolveAddr(b)
+	ip, port := dht.ResolvePeer(b)
 	return fmt.Sprintf("%s:%d", ip, port)
 }
 
@@ -70,8 +82,8 @@ type dhtErrorTracker struct {
 	d *dht.DHT
 }
 
-func (t *dhtErrorTracker) Error(code int, msg string) {
-	//fmt.Println(code, msg)
+func (t *dhtErrorTracker) Error(val int, err string) {
+	//fmt.Println(val, err)
 }
 
 type dhtServer struct {
@@ -80,7 +92,7 @@ type dhtServer struct {
 }
 
 func newDHTServer() (s *dhtServer, err error) {
-	id := dht.NewRandomID()
+	id := newRandomID()
 	conn, err := net.ListenPacket("udp", ":0")
 	if err != nil {
 		return
@@ -125,7 +137,7 @@ func initDHTServer(d *dht.DHT) (err error) {
 }
 
 func searchInfoHash(d *dht.DHT, tor *dht.ID) {
-	d.Search(tor, func(tor dht.ID, peer []byte) {
+	d.Search(tor, func(tor *dht.ID, peer []byte) {
 		if peer != nil {
 			fmt.Println(d.ID(), tor, resolveAddr(peer))
 		} else {
