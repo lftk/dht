@@ -459,30 +459,6 @@ func (d *DHT) getPeers(tor *ID, max int) (ps [][]byte) {
 	return
 }
 
-func encodeCompactNodes(nodes []*Node) []byte {
-	buf := bytes.NewBuffer(nil)
-	for _, n := range nodes {
-		buf.Write(n.id.Bytes())
-		buf.Write(n.addr.IP)
-		buf.WriteByte(byte(n.addr.Port >> 8))
-		buf.WriteByte(byte(n.addr.Port))
-	}
-	return buf.Bytes()
-}
-
-func decodeCompactNode(b []byte) map[*ID]*net.UDPAddr {
-	nodes := make(map[*ID]*net.UDPAddr)
-	for id, peer := range ResolveNodes(b) {
-		ip, port := ResolvePeer(peer)
-		s := fmt.Sprintf("%s:%d", ip, port)
-		addr, err := net.ResolveUDPAddr("udp", s)
-		if err == nil {
-			nodes[&id] = addr
-		}
-	}
-	return nodes
-}
-
 func (d *DHT) lookup(id *ID) (addrs []*net.UDPAddr) {
 	if nodes := d.route.Lookup(id); len(nodes) > 0 {
 		addrs = make([]*net.UDPAddr, len(nodes))
@@ -567,6 +543,30 @@ func decodeTID(tid []byte) (q string, id int16) {
 		}
 	}
 	return
+}
+
+func encodeCompactNodes(nodes []*Node) []byte {
+	buf := bytes.NewBuffer(nil)
+	for _, n := range nodes {
+		buf.Write(n.id.Bytes())
+		buf.Write(n.addr.IP)
+		buf.WriteByte(byte(n.addr.Port >> 8))
+		buf.WriteByte(byte(n.addr.Port))
+	}
+	return buf.Bytes()
+}
+
+func decodeCompactNode(b []byte) map[*ID]*net.UDPAddr {
+	nodes := make(map[*ID]*net.UDPAddr)
+	for id, peer := range ResolveNodes(b) {
+		ip, port := ResolvePeer(peer)
+		s := fmt.Sprintf("%s:%d", ip, port)
+		addr, err := net.ResolveUDPAddr("udp", s)
+		if err == nil {
+			nodes[&id] = addr
+		}
+	}
+	return nodes
 }
 
 func createPeer(ip net.IP, port int) []byte {

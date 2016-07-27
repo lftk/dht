@@ -1,7 +1,9 @@
 package dht
 
 import (
+	"math/rand"
 	"testing"
+	"time"
 )
 
 func Test_NewID(t *testing.T) {
@@ -20,4 +22,21 @@ func Test_NewID(t *testing.T) {
 	if id2.Compare(id) != 0 {
 		t.Fatal(id2, id)
 	}
+}
+
+func Benchmark_NewID(b *testing.B) {
+	for i := 0; i < rand.Intn(10000); i++ {
+		newRandomID()
+	}
+}
+
+var idRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+func newRandomID() *ID {
+	id := new(ID)
+	n, err := idRand.Read(id[:])
+	if err != nil || n != IDLen {
+		return ZeroID
+	}
+	return id
 }

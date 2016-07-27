@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Bucket type
+// Bucket manage node
 type Bucket struct {
 	cap   int
 	first *ID
@@ -93,12 +93,12 @@ func (b *Bucket) Random() *Node {
 	return node
 }
 
-// Time returns time
+// Time returns last contact time
 func (b *Bucket) Time() time.Time {
 	return b.time
 }
 
-// Update time
+// Update contact time
 func (b *Bucket) Update() {
 	b.time = time.Now()
 }

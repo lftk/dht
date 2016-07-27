@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Node represent a dht peer
+// Node represent a dht node
 type Node struct {
 	id     *ID
 	addr   *net.UDPAddr
@@ -33,12 +33,12 @@ func (n *Node) Addr() *net.UDPAddr {
 	return n.addr
 }
 
-// Time returns time
+// Time returns last contact time
 func (n *Node) Time() time.Time {
 	return n.time
 }
 
-// Update node lasttime
+// Update contact time
 func (n *Node) Update() {
 	n.time = time.Now()
 	n.pinged = 0
