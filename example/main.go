@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"net/http"
 	"runtime"
 	"sync"
 	"time"
@@ -12,107 +11,58 @@ import (
 	"github.com/4396/dht"
 )
 
-var idRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-
 func newRandomID() *dht.ID {
 	id := new(dht.ID)
-	n, err := idRand.Read(id[:])
+	n, err := rand.Read(id[:])
 	if err != nil || n != dht.IDLen {
 		return dht.ZeroID
 	}
 	return id
 }
 
-func resolveAddr(b []byte) string {
-	ip, port := dht.ResolvePeer(b)
-	return fmt.Sprintf("%s:%d", ip, port)
-}
-
 type dhtQueryTracker struct {
-	d *dht.DHT
 }
 
 func (t *dhtQueryTracker) Ping(id *dht.ID) {
+	fmt.Println("q", "ping", id)
 }
 
 func (t *dhtQueryTracker) FindNode(id *dht.ID, target *dht.ID) {
+	fmt.Println("q", "find_node", id)
 }
-
-var tid2 int64
-var tors2 string
 
 func (t *dhtQueryTracker) GetPeers(id *dht.ID, tor *dht.ID) {
-	tid2++
+	fmt.Println("q", "get_peers", id)
 }
 
-var tid int64
-var tors string
-
 func (t *dhtQueryTracker) AnnouncePeer(id *dht.ID, tor *dht.ID, peer []byte) {
-	if tid++; tid%1000 == 0 {
-		tors = ""
-	}
-	s := fmt.Sprintln("ap", tid, tor)
-	tors = s + tors
-
-	fmt.Println("ap", resolveAddr(peer))
+	fmt.Println("q", "announce_peer", id)
 }
 
 type dhtReplyTracker struct {
-	d *dht.DHT
 }
 
 func (t *dhtReplyTracker) Ping(id *dht.ID) {
+	fmt.Println("r", "ping", id)
 }
 
 func (t *dhtReplyTracker) FindNode(id *dht.ID, nodes []byte) {
+	fmt.Println("r", "find_node", id)
 }
 
 func (t *dhtReplyTracker) GetPeers(id *dht.ID, peers [][]byte, nodes []byte) {
-	//fmt.Println("----GetPeers")
-	for _, peer := range peers {
-		fmt.Println("gp", resolveAddr(peer))
-	}
+	fmt.Println("r", "get_peers", id)
 }
 
 func (t *dhtReplyTracker) AnnouncePeer(id *dht.ID) {
+	fmt.Println("r", "announce_peer", id)
 }
 
 type dhtErrorTracker struct {
-	d *dht.DHT
 }
 
 func (t *dhtErrorTracker) Error(val int, err string) {
-	//fmt.Println(val, err)
-}
-
-type dhtServer struct {
-	d *dht.DHT
-	t *dht.Tracker
-}
-
-func newDHTServer() (s *dhtServer, err error) {
-	id := newRandomID()
-	conn, err := net.ListenPacket("udp", ":0")
-	if err != nil {
-		return
-	}
-	d := dht.NewDHT(id, conn.(*net.UDPConn), 16)
-	t := dht.NewTracker(
-		&dhtQueryTracker{d},
-		&dhtReplyTracker{d},
-		&dhtErrorTracker{d},
-	)
-	s = &dhtServer{d, t}
-	return
-}
-
-func dhtNodeNums(d *dht.DHT) (n int) {
-	d.Route().Map(func(b *dht.Bucket) bool {
-		n += b.Count()
-		return true
-	})
-	return
+	fmt.Println("e", val, err)
 }
 
 var routers = []string{
@@ -136,18 +86,7 @@ func initDHTServer(d *dht.DHT) (err error) {
 	return
 }
 
-func searchInfoHash(d *dht.DHT, tor *dht.ID) {
-	d.Search(tor, func(tor *dht.ID, peer []byte) {
-		if peer != nil {
-			fmt.Println(d.ID(), tor, resolveAddr(peer))
-		} else {
-			fmt.Println(d.ID(), tor, "done")
-		}
-	})
-}
-
 type udpMessage struct {
-	idx  int
 	addr *net.UDPAddr
 	data []byte
 	size int
@@ -156,85 +95,58 @@ type udpMessage struct {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	msg := make(chan *udpMessage, 1024)
+	conn, err := net.ListenPacket("udp", ":0")
+	if err != nil {
+		return
+	}
 
+	d := dht.NewDHT(newRandomID(), conn.(*net.UDPConn), 16)
+	t := dht.NewTracker(&dhtQueryTracker{}, &dhtReplyTracker{}, &dhtErrorTracker{})
+	exit := make(chan interface{})
+	msg := make(chan *udpMessage, 1024)
 	datas := &sync.Pool{New: func() interface{} {
 		return make([]byte, 1024)
 	}}
 
-	var svrs []*dhtServer
-	var w sync.WaitGroup
-	for i := 0; i < 1000; i++ {
-		s, err := newDHTServer()
-		if err != nil {
-			continue
+	go func(msg chan *udpMessage) {
+		if err = initDHTServer(d); err != nil {
+			fmt.Println(err)
+			close(exit)
+			return
 		}
-		svrs = append(svrs, s)
-		w.Add(1)
-		go func(d *dht.DHT, idx int, msg chan *udpMessage) {
-			defer w.Done()
-
-			if err = initDHTServer(d); err != nil {
-				fmt.Println(err)
-			}
-
-			conn := d.Conn()
-			buf := datas.Get().([]byte)
-			for {
-				n, addr, err := conn.ReadFromUDP(buf)
-				if err != nil {
-					fmt.Println(err)
-					continue
-				}
-				msg <- &udpMessage{idx, addr, buf, n}
-			}
-		}(s.d, i, msg)
-	}
-
-	var numNodes int
-
-	go func() {
-		timer := time.Tick(time.Second * 30)
-		checkup := time.Tick(time.Second * 30)
-
+		conn := d.Conn()
+		buf := datas.Get().([]byte)
 		for {
-			select {
-			case m := <-msg:
-				s := svrs[m.idx]
-				if m.addr != nil && m.data != nil {
-					s.d.HandleMessage(m.addr, m.data[:m.size], s.t)
-					datas.Put(m.data)
-				}
-			case <-timer:
-				for _, s := range svrs {
-					if n := s.d.Route().NumNodes(); n < 1024 {
-						s.d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6, time.Minute*5)
-					}
-				}
-			case <-checkup:
-				var numNodes2 int
-				tor, _ := dht.ResolveID("004aa73f1a3001fb6ecf545336f155123aee4941")
-				for _, s := range svrs {
-					if n := s.d.Route().NumNodes(); n < 1024 {
-						s.d.FindNode(s.d.ID())
-						searchInfoHash(s.d, tor)
-						numNodes2 += n
-					}
-				}
-				numNodes = numNodes2
-				fmt.Println(numNodes, tid, tid2)
-			default:
+			n, addr, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				fmt.Println(err)
+				continue
 			}
+			msg <- &udpMessage{addr, buf, n}
 		}
-	}()
+	}(msg)
 
-	startupTime := time.Now()
-	go http.HandleFunc("/dht", func(res http.ResponseWriter, req *http.Request) {
-		fmt.Fprintln(res, "===", startupTime, numNodes, tid, tid2)
-		fmt.Fprintln(res, "---------------------------------------------------")
-		res.Write([]byte(tors))
-	})
-	http.ListenAndServe(":6882", nil)
+	timer := time.Tick(time.Second * 30)
+	checkup := time.Tick(time.Second * 30)
 
-	w.Wait()
+	for {
+		select {
+		case m := <-msg:
+			if m.addr != nil && m.data != nil {
+				d.HandleMessage(m.addr, m.data[:m.size], t)
+				datas.Put(m.data)
+			}
+		case <-timer:
+			if n := d.Route().NumNodes(); n < 1024 {
+				d.DoTimer(time.Minute*15, time.Minute*15, time.Hour*6, time.Minute*5)
+			}
+		case <-checkup:
+			if n := d.Route().NumNodes(); n < 1024 {
+				d.FindNode(d.ID())
+			}
+		case <-exit:
+			return
+		default:
+		}
+	}
 }
