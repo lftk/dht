@@ -125,11 +125,11 @@ func initDHTServer(d *dht.DHT) (err error) {
 }
 
 func searchInfoHash(d *dht.DHT, tor *dht.ID) {
-	d.Search(tor, func(tid int16, peer []byte) {
+	d.Search(tor, func(tor dht.ID, peer []byte) {
 		if peer != nil {
-			fmt.Println(d.ID(), tid, resolveAddr(peer))
+			fmt.Println(d.ID(), tor, resolveAddr(peer))
 		} else {
-			fmt.Println(d.ID(), tid, "done")
+			fmt.Println(d.ID(), tor, "done")
 		}
 	})
 }
