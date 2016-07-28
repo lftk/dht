@@ -1,18 +1,19 @@
 package dht
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func Test_search(t *testing.T) {
-	/*
-		s := newSearches()
-		for i := int16(0); i <= math.MaxInt16; i++ {
-			tid, _ := s.Insert(nil, func(tor ID, peer []byte) {
-			})
-			_ = tid
+	s := newSearches()
+	for i := int16(0); i <= math.MaxInt16; i++ {
+		if id, _ := s.Insert(nil, nil); id != i {
+			t.Error(id, i)
+			break
 		}
-		s.Map(func(tid int16, sr *search) bool {
-			sr.Notify(sr.tor, nil)
-			return true
-		})
-	*/
+		if i == math.MaxInt16 {
+			break
+		}
+	}
 }

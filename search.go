@@ -118,7 +118,7 @@ func (s *searches) Find(tor *ID) (tid int16, sr *search) {
 }
 
 func (s *searches) nextTID() int16 {
-	if n := s.Count(); n < math.MaxInt16 {
+	if n := s.Count(); n < math.MaxInt16+1 {
 		for i := 0; i <= n; i++ {
 			tid := s.tid
 			if s.tid == math.MaxInt16 {
