@@ -249,7 +249,8 @@ func (d *DHT) handleGetPeers(tid int16, id *ID, values [][]byte, nodes []byte) {
 
 	if len(values) > 0 {
 		for _, peer := range values {
-			d.storePeer(sr.tor, peer)
+			// unreliable peer
+			//d.storePeer(sr.tor, peer)
 			sr.Notify(sr.tor, peer)
 		}
 	} else if len(nodes) > 0 {
@@ -278,6 +279,10 @@ func (d *DHT) handleAnnouncePeer() {
 }
 
 // Ping a address
+func (d *DHT) Ping(addr *net.UDPAddr) error {
+	return d.ping(addr)
+}
+
 func (d *DHT) ping(addr *net.UDPAddr) error {
 	data := map[string]interface{}{
 		"id": d.ID().Bytes(),
